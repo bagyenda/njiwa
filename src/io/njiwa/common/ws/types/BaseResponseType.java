@@ -80,13 +80,13 @@ public class BaseResponseType implements RpsElement {
 
         @XmlEnum(String.class)
         public enum Status {
-            @XmlEnumValue("Executed-Success")
+            @XmlEnumValue("EXECUTED_SUCCESS")
             ExecutedSuccess,
-            @XmlEnumValue("Executed-WithWarning")
+            @XmlEnumValue("EXECUTED_WITHWARNING")
             ExecutedWithWarning,
-            @XmlEnumValue("Failed")
+            @XmlEnumValue("FAILED")
             Failed,
-            @XmlEnumValue("Expired")
+            @XmlEnumValue("EXPIRED")
             Expired;
 
             public static Transport.MessageStatus toTransMsgStatus(ExecutionStatus.Status status, Transport
