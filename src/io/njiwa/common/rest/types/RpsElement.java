@@ -71,7 +71,7 @@ public class RpsElement {
         if (!Utils.isEmpty(inbound_user ))
             entity.setwSuserid(inbound_user);
         if (!Utils.isEmpty(inbound_pass ))
-            entity.setOutgoingWSpassword(inbound_pass);
+            entity.setwSpassword(inbound_pass);
         entity.setOutgoingAuthMethod(RpaEntity.OutgoingAuthMethod.USER); // For now, only user+pass supported. right?
         if (!Utils.isEmpty(outbound_user ))
             entity.setOutgoingWSuserid(outbound_user);
@@ -103,6 +103,7 @@ public class RpsElement {
                     entity.setSecureMessagingCertificateAlias(alias);
                 }
                 X509Certificate certificate =  Utils.certificateFromBytes(Utils.Http.decodeDataUri(cert));
+                entity.updateCertInfo(certificate);
                 Utils.getKeyStore().setCertificateEntry(alias,certificate); // Save it.
                 Utils.writeKeyStore(); // Update to file
             } catch (Exception ex) {

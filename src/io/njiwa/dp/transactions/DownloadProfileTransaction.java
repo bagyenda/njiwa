@@ -425,7 +425,7 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
 
     private boolean doSendData(EntityManager em, byte[] data, SmDpTransaction trans) {
         try {
-            final RpaEntity smsr = em.find(RpaEntity.class, smsrId);
+             RpaEntity smsr = em.find(RpaEntity.class, smsrId);
 
             final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
             final String toAddress = rcptTo.makeAddress();
@@ -462,7 +462,7 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
             case CREATEISDP:
 
                 try {
-                    final RpaEntity smsr = em.find(RpaEntity.class, smsrId);
+                     RpaEntity smsr = em.find(RpaEntity.class, smsrId);
 
                     final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
                     final String toAddress = rcptTo.makeAddress();
@@ -533,17 +533,16 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     // Make new session
                     session = new Scp03.Session(Scp03.Session.Mode.TLV, SCP03_KEY_VERSION, SCP03_KEY_ID);
 
-                final List<SDCommand> l = new ArrayList<SDCommand>(); // The commands to be sent
+                final List<SDCommand> l = new ArrayList<>(); // The commands to be sent
                 // We have to send INITIALISE or EXTERNAL_AUTH
                 if (session.state != Scp03.Session.State.AUTHENTICATED) {
                     l.add(session.scp03Command());
                     scp03Sessions.addLast(session.copyOf()); // Store session
                 } else {
                     // Break up the profile TLVs, send them, save the sub-sessions since they have the saved info
-                    ByteArrayInputStream in = new ByteArrayInputStream(profileTLVs);
+                    InputStream in = new ByteArrayInputStream(profileTLVs);
                     while (in.available() > 0) {
-                        int dlen = in.available() < MAXIMUM_PROFILE_SEGMENT_LENGTH ? in.available() :
-                                MAXIMUM_PROFILE_SEGMENT_LENGTH;
+                        int dlen = Math.min(in.available(), MAXIMUM_PROFILE_SEGMENT_LENGTH);
                         byte[] pData = new byte[dlen];
                         in.read(pData);
                         SDCommand c = session.scp03Command(SDCommand.SCP03tCommand.ProfileElement

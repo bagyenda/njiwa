@@ -50,7 +50,7 @@ public class Key {
     private
     Integer index;
 
-    @Column(nullable = false, name = "kcv", columnDefinition = "text")
+    @Column(name = "kcv", columnDefinition = "text")
     private
     String checkValue;
 

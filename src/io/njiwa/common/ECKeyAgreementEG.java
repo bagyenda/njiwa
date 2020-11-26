@@ -13,15 +13,19 @@
 package io.njiwa.common;
 
 import io.njiwa.common.model.KeyComponent;
+import org.bouncycastle.asn1.ASN1OctetString;
+import org.bouncycastle.asn1.x509.AuthorityKeyIdentifier;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.crypto.KeyAgreement;
 import java.io.ByteArrayOutputStream;
 import java.security.*;
+import java.security.cert.Extension;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 
 /**
@@ -44,8 +48,8 @@ public class ECKeyAgreementEG {
     public static  final byte[] DST_VERIFY_KEY_TYPE = new byte[] {(byte)0x82};  // Table 11-17 of GPC
     public static  final byte[] KEY_AGREEMENT_KEY_TYPE = new byte[] {0, (byte)0x80}; // Table 3-5 of GPC Ammend. E
     // See https://stackoverflow.com/questions/17877412/how-to-prove-that-one-certificate-is-issuer-of-another-certificates
-    public static final String SUBJECT_KEY_IDENTIFIER_OID = "2.5.29.14";
-    public static final String AUTHORITY_KEY_IDENTIFIER_OID = "2.5.29.35";
+    private static final String SUBJECT_KEY_IDENTIFIER_OID = "2.5.29.14";
+    private static final String AUTHORITY_KEY_IDENTIFIER_OID = "2.5.29.35";
     public static final int SM_SR_CERTIFICATE_TYPE = 0x02; // Table 39 of SGP.02 v4.1
     public static final int SM_DP_CERTIFICATE_TYPE = 0x01; // Table 77 of SGP.02 v4.1
 
@@ -68,6 +72,27 @@ public class ECKeyAgreementEG {
         Security.addProvider(new BouncyCastleProvider());
     }
 
+
+    public static byte[] getCertificateSubjectKeyIdentifier(X509Certificate cert)
+    {
+        // According to https://stackoverflow.com/questions/6523081/why-doesnt-my-key-identifier-match#6529052
+        // It is always 20 bytes, so we expect 04 LEN 04 LEN2 DATA
+        try {
+            byte[] o = cert.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
+            return Arrays.copyOfRange(o,4,o.length);
+        } catch (Exception ex) {
+            String xs = ex.getMessage();
+        }
+        return null;
+    }
+
+    public static byte[] getCertificateAuthorityKeyIdentifier(X509Certificate cert)
+    {
+        byte[] o = cert.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
+        ASN1OctetString oc = ASN1OctetString.getInstance(o);
+        AuthorityKeyIdentifier aki = AuthorityKeyIdentifier.getInstance(oc.getOctets());
+        return aki.getKeyIdentifier();
+    }
 
     // ECKA-DH and ECKA-EG are basically the same except for the two-way exchange of public keys between A (sender)
     // and B (receiver), and the use on the other side of the other public key.
@@ -342,10 +367,10 @@ public class ECKeyAgreementEG {
         // Table 77 of SGP 02 v3.1
         Utils.BER.appendTLV(os, (short) 0x93, cert.getSerialNumber().toByteArray());
         // Sec 2.3.2.2 of SGP 02 v4.1 says that the following should be the "Authority Key Identifier"
-        byte[] caid = cert.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
+        byte[] caid =  getCertificateAuthorityKeyIdentifier(cert); // cert.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
         Utils.BER.appendTLV(os, (short) 0x42, caid);
 
-        byte[] subjectIdentifier = cert.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
+        byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(cert); // cert.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
         Utils.DGI.append(os, 0x5F20, subjectIdentifier);
         Utils.BER.appendTLV(os, (byte) 0x95, keyUsageQual);
         Date startDate = cert.getNotBefore();

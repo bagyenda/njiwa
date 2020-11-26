@@ -40,9 +40,11 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.util.BigIntegers;
 import org.bouncycastle.util.Store;
+import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 import redis.clients.jedis.Jedis;
 
 import javax.xml.bind.JAXBContext;
@@ -50,6 +52,7 @@ import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
@@ -85,14 +88,92 @@ public class Utils {
     //         org.apache.log4j.Logger.getLogger(InitialiserServlet.class.getName()); //!< The
     public final static Logger lg = Logger.getLogger(InitialiserServlet.class.getName());
     private static final boolean[] unreserved_url_chars; //!< This is the list allowed URL characters.
+    private static final Object mutex = new Object(); //!< for writing ks file.
     // logger for the entire system
     private static KeyStore ks = null; //!< The key store...
     private static String privKeyAlias = "dsa", privKeyPassword = "test";
     private static String keyStoreFileName = null;
-
-    private static final Object mutex = new Object (); //!< for writing ks file.
     private static String keystoreType;
     private static char[] keyStorePass;
+
+    static {
+        Calendar c = Calendar.getInstance();
+        c.set(9999, 12, 30);
+        infiniteDate = c.getTime(); // Get a year far into the future.
+
+    }
+
+    static {
+        unreserved_url_chars = new boolean[256];
+
+        unreserved_url_chars['A'] = true;
+        unreserved_url_chars['B'] = true;
+        unreserved_url_chars['C'] = true;
+        unreserved_url_chars['D'] = true;
+        unreserved_url_chars['E'] = true;
+        unreserved_url_chars['F'] = true;
+        unreserved_url_chars['G'] = true;
+        unreserved_url_chars['H'] = true;
+        unreserved_url_chars['I'] = true;
+        unreserved_url_chars['J'] = true;
+        unreserved_url_chars['K'] = true;
+        unreserved_url_chars['L'] = true;
+        unreserved_url_chars['M'] = true;
+        unreserved_url_chars['N'] = true;
+        unreserved_url_chars['O'] = true;
+        unreserved_url_chars['P'] = true;
+        unreserved_url_chars['Q'] = true;
+        unreserved_url_chars['R'] = true;
+        unreserved_url_chars['S'] = true;
+        unreserved_url_chars['T'] = true;
+        unreserved_url_chars['U'] = true;
+        unreserved_url_chars['V'] = true;
+        unreserved_url_chars['W'] = true;
+        unreserved_url_chars['X'] = true;
+        unreserved_url_chars['Y'] = true;
+        unreserved_url_chars['Z'] = true;
+        unreserved_url_chars['a'] = true;
+        unreserved_url_chars['b'] = true;
+        unreserved_url_chars['c'] = true;
+        unreserved_url_chars['d'] = true;
+        unreserved_url_chars['e'] = true;
+        unreserved_url_chars['f'] = true;
+        unreserved_url_chars['g'] = true;
+        unreserved_url_chars['h'] = true;
+        unreserved_url_chars['i'] = true;
+        unreserved_url_chars['j'] = true;
+        unreserved_url_chars['k'] = true;
+        unreserved_url_chars['l'] = true;
+        unreserved_url_chars['m'] = true;
+        unreserved_url_chars['n'] = true;
+        unreserved_url_chars['o'] = true;
+        unreserved_url_chars['p'] = true;
+        unreserved_url_chars['q'] = true;
+        unreserved_url_chars['r'] = true;
+        unreserved_url_chars['s'] = true;
+        unreserved_url_chars['t'] = true;
+        unreserved_url_chars['u'] = true;
+        unreserved_url_chars['v'] = true;
+        unreserved_url_chars['w'] = true;
+        unreserved_url_chars['x'] = true;
+        unreserved_url_chars['y'] = true;
+        unreserved_url_chars['z'] = true;
+        unreserved_url_chars['0'] = true;
+        unreserved_url_chars['1'] = true;
+        unreserved_url_chars['2'] = true;
+        unreserved_url_chars['3'] = true;
+        unreserved_url_chars['4'] = true;
+        unreserved_url_chars['5'] = true;
+        unreserved_url_chars['6'] = true;
+        unreserved_url_chars['7'] = true;
+        unreserved_url_chars['8'] = true;
+        unreserved_url_chars['9'] = true;
+        unreserved_url_chars['-'] = true;
+        unreserved_url_chars['_'] = true;
+        unreserved_url_chars['.'] = true;
+        unreserved_url_chars['~'] = true;
+
+    }
 
     public static String getPrivKeyAlias() {
         return privKeyAlias;
@@ -356,7 +437,8 @@ public class Utils {
         String parms = "";
         String sep = "";
         if (cgi_params != null) for (Pair<String, String> p : cgi_params) {
-            parms += String.format("%s%s=%s", sep, URLEncoder.encode(p.k, StandardCharsets.UTF_8.toString()), URLEncoder.encode(p.l, StandardCharsets.UTF_8.toString()));
+            parms += String.format("%s%s=%s", sep, URLEncoder.encode(p.k, StandardCharsets.UTF_8.toString()),
+                    URLEncoder.encode(p.l, StandardCharsets.UTF_8.toString()));
             sep = "&";
         }
 
@@ -581,28 +663,6 @@ public class Utils {
         return "+" + ServerSettings.getCountry_code() + xnum;
     }
 
-    public static void removeRecursively(Node node, short nodeType, String name) {
-
-        if (node.getNodeType() == nodeType && (name == null || node.getNodeName().equals(name))) {
-
-            node.getParentNode().removeChild(node);
-
-        } else {
-
-            // check the children recursively
-
-            NodeList list = node.getChildNodes();
-
-            for (int i = 0; i < list.getLength(); i++) {
-
-                removeRecursively(list.item(i), nodeType, name);
-
-            }
-
-        }
-
-    }
-
     /**
      * Round up to the nearest multiple of n
      *
@@ -640,9 +700,7 @@ public class Utils {
         if (o == null) return true;
         if (o instanceof String && ((String) o).length() == 0) return true;
         if (o instanceof Integer && 0 == (Integer) o) return true;
-        if (o instanceof Long && 0L == (Long) o) return true;
-
-        return false;
+        return o instanceof Long && 0L == (Long) o;
     }
 
     public static String tarFromAid(String aid) {
@@ -665,24 +723,6 @@ public class Utils {
         return DatatypeFactory.newInstance().newXMLGregorianCalendar(gc);
     }
 
-    // Use JAXB to serialise an object to XML
-    public static String toXML(Object o) throws Exception {
-        JAXBContext jc = JAXBContext.newInstance(o.getClass());
-        Marshaller m = jc.createMarshaller();
-        StringWriter w = new StringWriter();
-        m.marshal(o, w);
-        return w.toString();
-    }
-
-    public static <T> T fromXML(String xml, Class<T> cls) throws Exception {
-        JAXBContext jc = JAXBContext.newInstance(cls);
-        Unmarshaller um = jc.createUnmarshaller();
-        StringReader r = new StringReader(xml);
-
-        T o = (T) um.unmarshal(r);
-        return o;
-    }
-
     public static String ramHTTPPartIDfromAID(String aid) throws Exception {
         String rid, pix;
 
@@ -695,7 +735,6 @@ public class Utils {
         if (alias != null) privKeyAlias = alias;
         if (passwd != null) privKeyPassword = passwd;
     }
-
 
     public static void loadKeyStore(String keyfile, String type, String password) throws Exception {
         loadKeyStore(keyfile, type, password, true);
@@ -713,7 +752,7 @@ public class Utils {
         if (!file.exists() && type == null) { // right?? What if type is custom and not file-based?
             // Make it.
             FileOutputStream fos = new FileOutputStream(keyfile);
-            xks.load(null,null);
+            xks.load(null, null);
             xks.store(fos, passwd);
             fos.close();
         } else if (file.isDirectory() && type == null)
@@ -721,8 +760,7 @@ public class Utils {
         try {
             FileInputStream fis = new FileInputStream(keyfile);
             xks.load(fis, passwd);
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             //     System.out.println();
             throw ex;
         }
@@ -736,24 +774,23 @@ public class Utils {
     }
 
     /**
-     * @brief this should be called each time the keystore changes.
      * @throws Exception
+     * @brief this should be called each time the keystore changes.
      */
-    public static void writeKeyStore()  {
+    public static void writeKeyStore() {
         synchronized (mutex) {
-            if (ks != null)
-            try {
+            if (ks != null) try {
                 OutputStream wstream = new FileOutputStream(keyStoreFileName);
-                ks.store(wstream,keyStorePass);
+                ks.store(wstream, keyStorePass);
                 wstream.close();
             } catch (Exception ex) {
-                lg.warning(String.format("Failed to write keystore file [%s]: %s", keyStoreFileName,ex));
+                lg.warning(String.format("Failed to write keystore file [%s]: %s", keyStoreFileName, ex));
             }
         }
     }
+
     public static KeyStore getKeyStore() throws Exception {
-        if (ks == null)
-            throw new Exception("KeyStore not set");
+        if (ks == null) throw new Exception("KeyStore not set");
 
         return ks;
     }
@@ -824,7 +861,6 @@ public class Utils {
         return data;
     }
 
-
     public static byte[] aesMAC(byte[] input, byte[] key) {
         BlockCipher cp = new AESEngine();
         CMac cmac = new CMac(cp);
@@ -865,6 +901,7 @@ public class Utils {
         }
         return null;
     }
+
     public static X509Certificate certificateFromBytes(String cert) throws Exception {
         return certificateFromBytes(cert.getBytes(StandardCharsets.UTF_8));
     }
@@ -1098,8 +1135,7 @@ public class Utils {
 
             for (int i = 0; i < hex.length(); i++) {
                 int ch = hex.charAt(i);
-                if (Character.isWhitespace(ch))
-                    continue; // Skip space. Right??
+                if (Character.isWhitespace(ch)) continue; // Skip space. Right??
                 os.write(ch & 0xFF);
             }
 
@@ -1136,6 +1172,31 @@ public class Utils {
             return o;
         }
 
+        public static void trimWhitespace(Node node) {
+            NodeList children = node.getChildNodes();
+            for (int i = 0; i < children.getLength(); ++i) {
+                Node child = children.item(i);
+                if (child.getNodeType() == Node.TEXT_NODE) {
+                    child.setTextContent(child.getTextContent().trim());
+                }
+                trimWhitespace(child);
+            }
+        }
+
+        public static Node copyNode(Node xml, boolean stripSpaces) throws Exception {
+            String s = getNodeString(xml);
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            dbf.setNamespaceAware(true);
+            dbf.setIgnoringComments(true);
+            dbf.setIgnoringElementContentWhitespace(true);
+            InputSource is = new InputSource(new StringReader(s));
+            Document doc = dbf.newDocumentBuilder().parse(is);
+
+            Node root = doc.getDocumentElement();
+            if (stripSpaces) trimWhitespace(root);
+            return root;
+        }
+
         public static Node findNode(NodeList nl, Predicate<Node> pred) {
             try {
                 Node res;
@@ -1145,6 +1206,11 @@ public class Utils {
             } catch (Exception ex) {
             }
             return null;
+        }
+
+        public static Node findNode(NodeList nl, String tagname) {
+            return findNode(nl,
+                    (Node o) -> (o.getNodeType() == Node.ELEMENT_NODE && o.getNodeName().equalsIgnoreCase(tagname)));
         }
 
         public static Node findNode(Node n, Predicate<Node> pred) {
@@ -1197,6 +1263,45 @@ public class Utils {
             return null;
         }
 
+        public static void removeRecursively(Node node, short nodeType, String name) {
+
+            if (node.getNodeType() == nodeType && (name == null || node.getNodeName().equals(name))) {
+
+                node.getParentNode().removeChild(node);
+
+            } else {
+
+                // check the children recursively
+
+                NodeList list = node.getChildNodes();
+
+                for (int i = 0; i < list.getLength(); i++) {
+
+                    removeRecursively(list.item(i), nodeType, name);
+
+                }
+
+            }
+
+        }
+
+        // Use JAXB to serialise an object to XML
+        public static String toXML(Object o) throws Exception {
+            JAXBContext jc = JAXBContext.newInstance(o.getClass());
+            Marshaller m = jc.createMarshaller();
+            StringWriter w = new StringWriter();
+            m.marshal(o, w);
+            return w.toString();
+        }
+
+        public static <T> T fromXML(String xml, Class<T> cls) throws Exception {
+            JAXBContext jc = JAXBContext.newInstance(cls);
+            Unmarshaller um = jc.createUnmarshaller();
+            StringReader r = new StringReader(xml);
+
+            T o = (T) um.unmarshal(r);
+            return o;
+        }
     }
 
     public static class ECC {
@@ -1204,7 +1309,8 @@ public class Utils {
         /**
          * @brief known curves according to Table 4-3 of GPC Ammendment E, and Table 24 of SGP.02 v4.1
          */
-        private static final Map<Integer, AlgorithmParameterSpec> KNOWN_ECC_CURVES = new ConcurrentHashMap<Integer, AlgorithmParameterSpec>() {{
+        private static final Map<Integer, AlgorithmParameterSpec> KNOWN_ECC_CURVES = new ConcurrentHashMap<Integer,
+                AlgorithmParameterSpec>() {{
             put(0, new ECGenParameterSpec("P-256"));
             put(1, new ECGenParameterSpec("P-384"));
             put(2, new ECGenParameterSpec("P-512"));
@@ -1271,30 +1377,27 @@ public class Utils {
             ECParameterSpec params = p.k;
             KeyFactory kf = p.l;
 
-            return decodePrivateKey(input,params,kf);
+            return decodePrivateKey(input, params, kf);
         }
 
         /**
-         * @brief decode a private key from binary data
          * @param input
          * @param publicKey
          * @return
+         * @brief decode a private key from binary data
          */
-        public static ECPrivateKey decodePrivateKey(byte[] input, ECPublicKey publicKey) throws Exception
-        {
+        public static ECPrivateKey decodePrivateKey(byte[] input, ECPublicKey publicKey) throws Exception {
             ECParameterSpec params = publicKey.getParams();
-            return decodePrivateKey(input, params,null);
+            return decodePrivateKey(input, params, null);
         }
 
-        public static ECPrivateKey decodePrivateKey(byte[] input, X509Certificate certificate) throws Exception
-        {
-            ECPublicKey publicKey = (ECPublicKey)certificate.getPublicKey();
-            return decodePrivateKey(input,publicKey);
+        public static ECPrivateKey decodePrivateKey(byte[] input, X509Certificate certificate) throws Exception {
+            ECPublicKey publicKey = (ECPublicKey) certificate.getPublicKey();
+            return decodePrivateKey(input, publicKey);
         }
 
         private static ECPrivateKey decodePrivateKey(byte[] input, ECParameterSpec params, KeyFactory kf) throws Exception {
-            if (kf == null)
-                kf = KeyFactory.getInstance("ECDSA", ServerSettings.Constants.jcaProvider);
+            if (kf == null) kf = KeyFactory.getInstance("ECDSA", ServerSettings.Constants.jcaProvider);
             ObjectInputStream bis = new ObjectInputStream(new ByteArrayInputStream(input));
 
             // Decode S parameter
@@ -1323,37 +1426,30 @@ public class Utils {
             return new Pair<>(params, kf);
         }
 
-        private static ECParameterSpec fromAlgorithmParameterSpec(AlgorithmParameterSpec spec)
-        {
+        private static ECParameterSpec fromAlgorithmParameterSpec(AlgorithmParameterSpec spec) {
             if (spec instanceof ECGenParameterSpec) {
                 ECGenParameterSpec xspec = (ECGenParameterSpec) spec;
                 String cname = xspec.getName();
                 ECNamedCurveParameterSpec ecspec = ECNamedCurveTable.getParameterSpec(cname);
                 return new ECNamedCurveSpec(cname, ecspec.getCurve(), ecspec.getG(), ecspec.getN());
 
-            } else
-                return (ECParameterSpec) spec;
+            } else return (ECParameterSpec) spec;
         }
 
-        public static int getKeyParamRefFromPublicKey(ECPublicKey publicKey) throws Exception
-        {
+        public static int getKeyParamRefFromPublicKey(ECPublicKey publicKey) throws Exception {
             ECParameterSpec params = publicKey.getParams();
             // Cycle through our list and try to compare things...
             // see https://stackoverflow.com/questions/49895713/how-to-find-the-matching-curve-name-from-an-ecpublickey
-            for (Map.Entry<Integer,AlgorithmParameterSpec> e : KNOWN_ECC_CURVES.entrySet()) {
+            for (Map.Entry<Integer, AlgorithmParameterSpec> e : KNOWN_ECC_CURVES.entrySet()) {
                 ECParameterSpec ecParameterSpec = fromAlgorithmParameterSpec(e.getValue());
-                if (params.getOrder().equals(ecParameterSpec.getOrder())
-                        && params.getCofactor() == ecParameterSpec.getCofactor()
-                        && params.getCurve().equals(ecParameterSpec.getCurve())
-                        && params.getGenerator().equals(ecParameterSpec.getGenerator()))
+                if (params.getOrder().equals(ecParameterSpec.getOrder()) && params.getCofactor() == ecParameterSpec.getCofactor() && params.getCurve().equals(ecParameterSpec.getCurve()) && params.getGenerator().equals(ecParameterSpec.getGenerator()))
                     return e.getKey();
             }
             return -1;
         }
 
-        public static int getKeyParamRefFromCertificate(X509Certificate certificate) throws Exception
-        {
-            return getKeyParamRefFromPublicKey((ECPublicKey)certificate.getPublicKey());
+        public static int getKeyParamRefFromCertificate(X509Certificate certificate) throws Exception {
+            return getKeyParamRefFromPublicKey((ECPublicKey) certificate.getPublicKey());
         }
 
         public static int keyLength(ECKey key) {
@@ -1378,7 +1474,8 @@ public class Utils {
 
             CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
             String algo = getHashAlgo((ECPrivateKey) privateKey);
-            ContentSigner cs = new JcaContentSignerBuilder(algo).setProvider(ServerSettings.Constants.jcaProvider).build(privateKey);
+            ContentSigner cs =
+                    new JcaContentSignerBuilder(algo).setProvider(ServerSettings.Constants.jcaProvider).build(privateKey);
             gen.addSignerInfoGenerator(new JcaSignerInfoGeneratorBuilder(new JcaDigestCalculatorProviderBuilder().setProvider(ServerSettings.Constants.jcaProvider).build()).build(cs, certificate));
             gen.addCertificates(certs);
             CMSSignedData csd = gen.generate(data, true); // Include data
@@ -1769,9 +1866,8 @@ public class Utils {
                     int r;
                     boolean path_matches = path.toLowerCase().startsWith(c.path.toLowerCase());
                     boolean wildcard_domain = c.domain.charAt(0) == '.' && c.domain.indexOf('.', 1) > 0;
-                    boolean domains_match = domain != null ? domainMatches(domain, c.domain) : false;
-                    boolean suffix_match = domains_match ?
-                            (r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0 : false;
+                    boolean domains_match = domain != null && domainMatches(domain, c.domain);
+                    boolean suffix_match = domains_match && ((r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0);
 
                     if (path_matches && (explicit_domain == false || wildcard_domain && domains_match && suffix_match))
                         res.add(c); // Add it
@@ -1817,6 +1913,7 @@ public class Utils {
      */
     public static class KeyStoreEntryNotFound extends Exception {
         private List<String> aliasList;
+
         public KeyStoreEntryNotFound(String message) {
             super(message);
             try {
@@ -1827,13 +1924,14 @@ public class Utils {
             }
 
         }
-        private  List<String>  getKeyStoreAliases(KeyStore ks) throws Exception
-        {
+
+        private List<String> getKeyStoreAliases(KeyStore ks) throws Exception {
             List<String> list = Collections.list(ks.aliases());
             return list;
         }
 
     }
+
     /**
      * @brief A CGI parameter decoder
      */
@@ -1898,6 +1996,21 @@ public class Utils {
      * JBOSS JAX APIs as far as we know, so best we parse ourselves
      */
     public static class Http {
+        /**
+         * @param dataUri
+         * @return
+         * @throws Exception
+         * @brief decode a data: uri. We assume base64 encoding
+         */
+        public static byte[] decodeDataUri(String dataUri) throws Exception {
+            if (dataUri.indexOf("data:") != 0) return dataUri.getBytes(StandardCharsets.UTF_8);
+            int startIndex = dataUri.indexOf(",") + 1;
+            String preAmble = dataUri.substring(0, startIndex);
+            boolean isb64 = preAmble.contains("base64");
+            String data = dataUri.substring(startIndex);
+            return isb64 ? Base64.getDecoder().decode(data) : data.getBytes(StandardCharsets.UTF_8);
+        }
+
         public enum Method {
             GET, POST, HEAD, PUT, DELETE;
 
@@ -2160,7 +2273,8 @@ public class Utils {
 
                 xos.write("\r\n".getBytes(StandardCharsets.UTF_8));
                 if (xhasBody) {
-                    byte[] pre = (useChunked) ? String.format("%X\r\n", body.length).getBytes(StandardCharsets.UTF_8) : new byte[0];
+                    byte[] pre = (useChunked) ?
+                            String.format("%X\r\n", body.length).getBytes(StandardCharsets.UTF_8) : new byte[0];
                     byte[] post = (useChunked) ? "\r\n".getBytes(StandardCharsets.UTF_8) : new byte[0];
 
                     xos.write(pre);
@@ -2172,7 +2286,7 @@ public class Utils {
                 out.flush();
                 try {
                     // Log it:
-                    String xs = new String(xout, "ASCII");
+                    String xs = new String(xout, StandardCharsets.US_ASCII);
                     Utils.lg.info("HTTP Response going out as txt[" + xs + "], bin[" + HEX.b2H(xout) + "]");
                 } catch (Exception ex) {
                     String ss = ex.getLocalizedMessage();
@@ -2333,8 +2447,7 @@ public class Utils {
             @Override
             protected boolean hasBody() {
                 int code = status.getStatusCode();
-                if ((code / 100 == 1) || (code == 204) || (code == 304)) return false;
-                return true;
+                return (code / 100 != 1) && (code != 204) && (code != 304);
             }
 
             /**
@@ -2375,101 +2488,6 @@ public class Utils {
 
             }
         }
-
-        /**
-         * @brief decode a data: uri. We assume base64 encoding
-         * @param dataUri
-         * @return
-         * @throws Exception
-         */
-        public static byte[] decodeDataUri(String dataUri)  throws Exception {
-            if (dataUri.indexOf("data:") != 0)
-                return dataUri.getBytes(StandardCharsets.UTF_8);
-            int startIndex = dataUri.indexOf(",") + 1;
-            String preAmble = dataUri.substring(0, startIndex);
-            boolean isb64 = preAmble.contains("base64");
-            String data = dataUri.substring(startIndex);
-            return isb64 ? Base64.getDecoder().decode(data) : data.getBytes(StandardCharsets.UTF_8);
-        }
-    }
-
-    static {
-        Calendar c = Calendar.getInstance();
-        c.set(9999, 12, 30);
-        infiniteDate = c.getTime(); // Get a year far into the future.
-
-    }
-
-    static {
-        unreserved_url_chars = new boolean[256];
-
-        unreserved_url_chars[(int) 'A'] = true;
-        unreserved_url_chars[(int) 'B'] = true;
-        unreserved_url_chars[(int) 'C'] = true;
-        unreserved_url_chars[(int) 'D'] = true;
-        unreserved_url_chars[(int) 'E'] = true;
-        unreserved_url_chars[(int) 'F'] = true;
-        unreserved_url_chars[(int) 'G'] = true;
-        unreserved_url_chars[(int) 'H'] = true;
-        unreserved_url_chars[(int) 'I'] = true;
-        unreserved_url_chars[(int) 'J'] = true;
-        unreserved_url_chars[(int) 'K'] = true;
-        unreserved_url_chars[(int) 'L'] = true;
-        unreserved_url_chars[(int) 'M'] = true;
-        unreserved_url_chars[(int) 'N'] = true;
-        unreserved_url_chars[(int) 'O'] = true;
-        unreserved_url_chars[(int) 'P'] = true;
-        unreserved_url_chars[(int) 'Q'] = true;
-        unreserved_url_chars[(int) 'R'] = true;
-        unreserved_url_chars[(int) 'S'] = true;
-        unreserved_url_chars[(int) 'T'] = true;
-        unreserved_url_chars[(int) 'U'] = true;
-        unreserved_url_chars[(int) 'V'] = true;
-        unreserved_url_chars[(int) 'W'] = true;
-        unreserved_url_chars[(int) 'X'] = true;
-        unreserved_url_chars[(int) 'Y'] = true;
-        unreserved_url_chars[(int) 'Z'] = true;
-        unreserved_url_chars[(int) 'a'] = true;
-        unreserved_url_chars[(int) 'b'] = true;
-        unreserved_url_chars[(int) 'c'] = true;
-        unreserved_url_chars[(int) 'd'] = true;
-        unreserved_url_chars[(int) 'e'] = true;
-        unreserved_url_chars[(int) 'f'] = true;
-        unreserved_url_chars[(int) 'g'] = true;
-        unreserved_url_chars[(int) 'h'] = true;
-        unreserved_url_chars[(int) 'i'] = true;
-        unreserved_url_chars[(int) 'j'] = true;
-        unreserved_url_chars[(int) 'k'] = true;
-        unreserved_url_chars[(int) 'l'] = true;
-        unreserved_url_chars[(int) 'm'] = true;
-        unreserved_url_chars[(int) 'n'] = true;
-        unreserved_url_chars[(int) 'o'] = true;
-        unreserved_url_chars[(int) 'p'] = true;
-        unreserved_url_chars[(int) 'q'] = true;
-        unreserved_url_chars[(int) 'r'] = true;
-        unreserved_url_chars[(int) 's'] = true;
-        unreserved_url_chars[(int) 't'] = true;
-        unreserved_url_chars[(int) 'u'] = true;
-        unreserved_url_chars[(int) 'v'] = true;
-        unreserved_url_chars[(int) 'w'] = true;
-        unreserved_url_chars[(int) 'x'] = true;
-        unreserved_url_chars[(int) 'y'] = true;
-        unreserved_url_chars[(int) 'z'] = true;
-        unreserved_url_chars[(int) '0'] = true;
-        unreserved_url_chars[(int) '1'] = true;
-        unreserved_url_chars[(int) '2'] = true;
-        unreserved_url_chars[(int) '3'] = true;
-        unreserved_url_chars[(int) '4'] = true;
-        unreserved_url_chars[(int) '5'] = true;
-        unreserved_url_chars[(int) '6'] = true;
-        unreserved_url_chars[(int) '7'] = true;
-        unreserved_url_chars[(int) '8'] = true;
-        unreserved_url_chars[(int) '9'] = true;
-        unreserved_url_chars[(int) '-'] = true;
-        unreserved_url_chars[(int) '_'] = true;
-        unreserved_url_chars[(int) '.'] = true;
-        unreserved_url_chars[(int) '~'] = true;
-
     }
 
 }

@@ -25,8 +25,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
-import static io.njiwa.common.ECKeyAgreementEG.AUTHORITY_KEY_IDENTIFIER_OID;
-import static io.njiwa.common.ECKeyAgreementEG.SUBJECT_KEY_IDENTIFIER_OID;
+import static io.njiwa.common.ECKeyAgreementEG.*;
 
 /**
  * Basic server settings
@@ -64,11 +63,11 @@ public class BasicSettings {
 
             certificateInfo.serialNumber = certificate.getSerialNumber();
             certificateInfo.subject = certificate.getSubjectDN().getName();
-            byte[] subjectIdentifier = certificate.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
+            byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(certificate); // certificate.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
             try {
                 certificateInfo.keyIdentifier = Utils.formatHexBytes(Utils.HEX.b2H(subjectIdentifier), ':');
             } catch (Exception ex) {}
-            byte[] caid = certificate.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
+            byte[] caid = getCertificateAuthorityKeyIdentifier(certificate); // certificate.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
             try {
                 certificateInfo.authorityKeyIdentifier = Utils.formatHexBytes(Utils.HEX.b2H(caid), ':');
             } catch (Exception ex) {}

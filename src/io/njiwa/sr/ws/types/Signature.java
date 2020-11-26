@@ -43,6 +43,9 @@ public class Signature {
             @XmlElement(name = "X509SubjectName", namespace = "http://www.w3.org/2000/09/xmldsig#")
             public String subjectName;
 
+            @XmlElement(name="X509SKI", namespace = "http://www.w3.org/2000/09/xmldsig#")
+            public String ski;
+
             @XmlElement(name = "X509Certificate", namespace = "http://www.w3.org/2000/09/xmldsig#")
             public byte[] certificate;
         }

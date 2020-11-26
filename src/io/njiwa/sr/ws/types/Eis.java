@@ -33,7 +33,8 @@ public class Eis implements RpsElement {
     @XmlElement(name = "EumSignedInfo")
     public EumSignedInfo signedInfo;
 
-    @XmlElement(name = "Signature", namespace = "http://www.w3.org/2000/09/xmldsig#")
+    // According to SGP.11 v4.1 this should have this name, W3 spec says otherwise.
+    @XmlElement(name = "EumSignature", namespace = "http://www.w3.org/2000/09/xmldsig#")
     public Signature sig;
 
     @XmlElement(name = "RemainingMemory")
@@ -48,10 +49,10 @@ public class Eis implements RpsElement {
     @XmlElement(name = "EumCertificateId")
     public String eumCertificateId;
 
-    @XmlElement
+    @XmlElement(name="ProfileInfo")
     List<ProfileInfo> profiles;
 
-    @XmlElement(name = "isd-r")
+    @XmlElement(name = "Isd-r")
     public SecurityDomain isdR;
 
     @XmlElement(name = "AuditTrail")
@@ -132,8 +133,8 @@ public class Eis implements RpsElement {
 
     public static Eis fromModel(io.njiwa.sr.model.Eis mEis) throws Exception {
         Eis eis = new Eis();
-        eis.signedInfo = Utils.fromXML(mEis.getSignedInfoXML(), EumSignedInfo.class);
-        eis.sig = Utils.fromXML(mEis.getSignatureXML(), Signature.class);
+        eis.signedInfo = Utils.XML.fromXML(mEis.getSignedInfoXML(), EumSignedInfo.class);
+        eis.sig = Utils.XML.fromXML(mEis.getSignatureXML(), Signature.class);
 
         eis.remainingMemory = mEis.getRemainingMemory();
         eis.availableMemoryForProfiles = mEis.getAvailableMemoryForProfiles();
@@ -174,8 +175,8 @@ public class Eis implements RpsElement {
 
     public io.njiwa.sr.model.Eis toModel() throws Exception {
         // Make XML of signature and signed info
-        String xmlSig = Utils.toXML(sig);
-        String xmlSignedInfo = Utils.toXML(signedInfo);
+        String xmlSig = Utils.XML.toXML(sig);
+        String xmlSignedInfo = Utils.XML.toXML(signedInfo);
 
         return toModel(xmlSignedInfo, xmlSig);
     }
@@ -243,10 +244,10 @@ public class Eis implements RpsElement {
         @XmlElement(name = "PlatformVersion")
         public String platformVersion;
 
-        @XmlElement(name = "isd-p-loadfile-aid")
+        @XmlElement(name = "Isd-p-loadfile-aid")
         public String isdPLoadFileAid;
 
-        @XmlElement(name = "isd-p-module-aid")
+        @XmlElement(name = "Isd-p-module-aid")
         public String isdPModuleAid;
 
         @XmlElement(name = "Ecasd")
@@ -499,7 +500,7 @@ public class Eis implements RpsElement {
         @XmlElement(name = "Role")
         public Role role;
 
-        @XmlElement
+        @XmlElement(name="Keyset")
         public List<KeySet> keySets;
 
 
@@ -576,10 +577,10 @@ public class Eis implements RpsElement {
             @XmlElement(name = "Cntr")
             public long counter;
 
-            @XmlElement
+            @XmlElement(name="Key")
             public List<Key> keys;
 
-            @XmlElement
+            @XmlElement(name="Certificate")
             public List<Certificate> certificates;
 
             public KeySet() {
@@ -647,7 +648,7 @@ public class Eis implements RpsElement {
                 @XmlElement(name = "Index")
                 public long index;
 
-                @XmlElement
+                @XmlElement(name="KeyComponents")
                 List<Component> components;
 
                 public Key() {

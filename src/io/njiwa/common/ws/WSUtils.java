@@ -212,7 +212,7 @@ public class WSUtils {
                     Node n = xid != null ? Utils.XML.findElementById(root, xid) : null;
                     if (n != null)
                         try {
-                            Utils.removeRecursively(n, Node.COMMENT_NODE, null); // Everything but comments
+                            Utils.XML.removeRecursively(n, Node.COMMENT_NODE, null); // Everything but comments
                             String xml = Utils.XML.getNodeString(n);
                             ByteArrayInputStream inputStream = new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
                             return new OctetStreamData(inputStream);

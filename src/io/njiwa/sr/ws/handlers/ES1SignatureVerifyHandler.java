@@ -36,11 +36,13 @@ import javax.xml.ws.handler.MessageContext;
 import javax.xml.ws.handler.soap.SOAPHandler;
 import javax.xml.ws.handler.soap.SOAPMessageContext;
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.security.PublicKey;
 import java.security.cert.X509Certificate;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -83,13 +85,10 @@ public class ES1SignatureVerifyHandler implements SOAPHandler<SOAPMessageContext
 
         // Process incoming signature
         try {
-            final SOAPBody spBody = message.getSOAPBody(); // Look in body
-            Node sig = spBody.getElementsByTagName("Signature").item(0); // Look for it in the body only. Not header!
-            XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+            final Node spBody =  Utils.XML.copyNode( message.getSOAPBody(), true);
 
             // Get our CI certificate
             X509Certificate ci_cert;
-
             try {
                 ci_cert = ServerSettings.getCiCert();
             } catch (Exception ex) {
@@ -102,35 +101,45 @@ public class ES1SignatureVerifyHandler implements SOAPHandler<SOAPMessageContext
             }
             // Try to look for the EUM info by looking for the X509SubjectName
 
-            NodeList eumIDNodes = spBody.getElementsByTagName("Eum-Id");
-            String eumId = eumIDNodes.getLength() > 0 ? eumIDNodes.item(0).getTextContent() : null;
+
+            Node eumIDNode = Utils.XML.findNode(spBody.getChildNodes(),"Eum-Id");
+            String eumId =  eumIDNode != null ?  eumIDNode.getTextContent() : null;
 
             X509KeySelector keySelector = new X509KeySelector(ci_cert, eumId, context);
-            DOMValidateContext validateContext = new DOMValidateContext(keySelector, sig);
-            final Node signedInfo = spBody.getElementsByTagName("EumSignedInfo").item(0);
-            final Node signatureNode = spBody.getElementsByTagNameNS("*", "Signature").item(0);
-            // Copied from https://www.ibm.com/developerworks/lotus/library/forms-digital/
-            validateContext.setURIDereferencer(new URIDereferencer() {
-                @Override
-                public Data dereference(URIReference uriReference, XMLCryptoContext context) throws URIReferenceException {
-                    if (uriReference.getURI() == null)
-                        try {
+            Node sig =  Utils.XML.findNode(spBody.getChildNodes(), "EumSignature");
+            if (sig != null)
+            // Rename it, since the spec requires it to have a standard name. right?
+                spBody.getOwnerDocument().renameNode(sig,
+                    "http://www.w3.org/2000/09/xmldsig#", "Signature");
+            else
+                sig =  Utils.XML.findNode(spBody.getChildNodes(), "Signature"); // Look for traditional one.
 
-                            // return new DOMSubTreeData(signedInfo,true);
-                            Utils.removeRecursively(signedInfo, Node.COMMENT_NODE, null); // Remove comments as per spec
-                            String xml = Utils.XML.getNodeString(signedInfo);
-                            ByteArrayInputStream inputStream = new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
-                            return new OctetStreamData(inputStream);
-                        } catch (Exception ex) {
-                            return null;
-                        }
-                    else {
-                        URIDereferencer defaultDereferencer = XMLSignatureFactory.getInstance("DOM").
-                                getURIDereferencer();
-                        return defaultDereferencer.dereference(uriReference, context);
+            DOMValidateContext validateContext = new DOMValidateContext(keySelector, sig);
+            final Node signedInfo = Utils.XML.findNode(spBody.getChildNodes(),"EumSignedInfo");
+            final Node signatureNode = Utils.XML.findNode(spBody.getChildNodes(), "SignatureValue");
+
+            // Copied from https://www.ibm.com/developerworks/lotus/library/forms-digital/
+            validateContext.setURIDereferencer((uriReference, context1) -> {
+                String uri = uriReference.getURI();
+                if (uri == null)
+                    try {
+                        Utils.XML.removeRecursively(signedInfo, Node.COMMENT_NODE, null); // Remove comments as per spec
+                       return  new NodeSetData() {
+                            public Iterator iterator() {
+                                return Collections.singletonList(signedInfo).iterator();
+                            }
+                        };
+                    } catch (Exception ex) {
+                        return null;
                     }
+                else {
+                    URIDereferencer defaultDereferencer = XMLSignatureFactory.getInstance("DOM").
+                            getURIDereferencer();
+                    return defaultDereferencer.dereference(uriReference, context1);
                 }
             });
+            XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+            validateContext.setProperty("javax.xml.crypto.dsig.cacheReference", Boolean.TRUE);
             XMLSignature signature = fac.unmarshalXMLSignature(validateContext);
 
             boolean cv = signature.validate(validateContext);
@@ -145,8 +154,11 @@ public class ES1SignatureVerifyHandler implements SOAPHandler<SOAPMessageContext
                 // Check the validation status of each Reference.
                 Iterator i = signature.getSignedInfo().getReferences().iterator();
                 for (int j = 0; i.hasNext(); j++) {
-                    boolean refValid = ((Reference) i.next()).validate(validateContext);
+                    Reference r = ((Reference) i.next());
+                    boolean refValid = r.validate(validateContext);
+                    InputStream is = r.getDigestInputStream();
                     Utils.lg.severe("ref[" + j + "] validity status: " + refValid);
+                    Utils.lg.severe("ref[" + j + "] data: " + is.toString());
                 }
                 // }
             } else {
@@ -208,20 +220,21 @@ public class ES1SignatureVerifyHandler implements SOAPHandler<SOAPMessageContext
                     throw new KeySelectorException(String.format("No key found for eum [%s]: %s", eumId, ex.getMessage()));
                 }
 
-            Iterator ki = keyInfo.getContent().iterator();
-            while (ki.hasNext()) {
-                XMLStructure info = (XMLStructure) ki.next();
-                if (!(info instanceof X509Data))
-                    continue;
+            for (Object info : keyInfo.getContent()) {
+                if (!(info instanceof X509Data)) continue;
                 X509Data x509Data = (X509Data) info;
-                Iterator xi = x509Data.getContent().iterator();
-                while (xi.hasNext()) {
-                    Object o = xi.next();
+                for (Object o : x509Data.getContent()) {
+                    X509Certificate xcert;
+                    // Look for SKI first, since it is more reliable
+                    if ((o instanceof  byte[]) &&
+                            (xcert = RpaEntity.getCertificateBySKI(em, (byte[])o)) != null) {
+                            o = xcert;
+                    }
                     // Handle strings: Subject name thingies...
-                    if (o instanceof String) {
+                    else if (o instanceof String) {
                         // Must be a subject name, try to look for it
                         final String pname = (String) o;
-                        X509Certificate xcert = RpaEntity.getCertificateBySubject(em, pname);
+                         xcert = RpaEntity.getCertificateBySubject(em, pname);
                         if (xcert != null)
                             o = xcert;
                         // Else fallthrough and fail.
@@ -229,8 +242,7 @@ public class ES1SignatureVerifyHandler implements SOAPHandler<SOAPMessageContext
                     // Either we got a certificate by look up above, or this node *is* a certificate in itself.
                     // If it is *is* one, perhaps we should check it is one of ours. Right? Or we do that at upper
                     // level?
-                    if (!(o instanceof X509Certificate))
-                        continue;
+                    if (!(o instanceof X509Certificate)) continue;
                     // Verify it
                     try {
                         ((X509Certificate) o).verify(parent_cert.getPublicKey());

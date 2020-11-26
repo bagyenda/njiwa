@@ -13,6 +13,7 @@
 package io.njiwa.common.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.njiwa.common.ECKeyAgreementEG;
 import io.njiwa.common.PersistenceUtility;
 import io.njiwa.common.ServerSettings;
 import io.njiwa.common.Utils;
@@ -20,7 +21,6 @@ import org.apache.commons.net.util.SubnetUtils;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
-import javax.naming.ldap.LdapName;
 import javax.naming.ldap.Rdn;
 import javax.persistence.*;
 import java.security.SecureRandom;
@@ -105,6 +105,9 @@ public class RpaEntity {
     private String x509Subject; //!< This is the X.509 certificate's subject field. It is extracted from the
     // certificate itself
 
+    @Column(nullable = true, columnDefinition = "TEXT")
+    private String x509SKI; //!< The subject key identifier, hex-coded...
+
     //!< This is the dns name. Must be unique
     @Column(nullable = false, columnDefinition = "TEXT", unique = true, name = "dns_name")
     private String dns_name;
@@ -187,17 +190,6 @@ public class RpaEntity {
         setOid(oid);
     }
 
-    private static String canonicaliseSubject(String x509Subject) {
-        try {
-            LdapName d = new LdapName(x509Subject);
-            ArrayList<Rdn> l = new ArrayList<>(d.getRdns());
-            Collections.sort(l, rdnCompare);
-            return new LdapName(l).toString();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     public static RpaEntity getByDNS(EntityManager em, String dns_name)  {
         return em.createQuery("from RpaEntity  where  dns_name = :n", RpaEntity.class)
                 .setParameter("n", dns_name)
@@ -218,26 +210,38 @@ public class RpaEntity {
     }
 
     // XXX We need a better way to canonicalise the subjects
+    // This is used by EUM verify EIS signature
     public static X509Certificate getCertificateBySubject(EntityManager em, String x509Subject) {
-        String alias;
-        RpaEntity rpaEntity = em.createQuery("from RpaEntity WHERE x509Subject = :s", RpaEntity.class)
+       try {
+           RpaEntity rpaEntity = em.createQuery("from RpaEntity WHERE x509Subject = :s", RpaEntity.class)
 
-                .setParameter("s", canonicaliseSubject(x509Subject)).setMaxResults(1).getSingleResult();
-        alias = rpaEntity.getWskeyStoreAlias();
+                   .setParameter("s", x509Subject).setMaxResults(1).getSingleResult();
+           return rpaEntity.secureMessagingCert();
+       } catch (Exception ex) {
+           return null;
+       }
+    }
+
+    public static X509Certificate getCertificateBySKI(EntityManager em, byte[] x509SKI) {
         try {
-            return (X509Certificate) Utils.getKeyStore().getCertificate(alias);
+            String ski = Utils.HEX.b2H(x509SKI);
+            RpaEntity rpaEntity = em.createQuery("from RpaEntity WHERE x509SKI = :s", RpaEntity.class)
+
+                    .setParameter("s", ski).setMaxResults(1).getSingleResult();
+            return rpaEntity.secureMessagingCert();
         } catch (Exception ex) {
             return null;
         }
     }
 
+
     public void updateInterfaceUris(String prefix)
     {
-        setEs1URL(prefix + "/SMSR");
-        setEs2URL(prefix + "/SMDP");
-        setEs3URL(prefix + "/SMDP");
-        setEs4URL(prefix + "/SMSR");
-        setEs7URL(prefix + "/SMSR");
+        setEs1URL(prefix + "/SMSR/ES1");
+        setEs2URL(prefix + "/SMDP/ES2");
+        setEs3URL(prefix + "/SMDP/ES3");
+        setEs4URL(prefix + "/SMSR/ES4");
+        setEs7URL(prefix + "/SMSR/ES7");
     }
 
     public static RpaEntity getByOID(EntityManager em, String oid, Type type) {
@@ -289,6 +293,14 @@ public class RpaEntity {
         RpaEntity rpaEntity = getByOID(em, oid, type);
         String alias = rpaEntity.getWskeyStoreAlias();
         return (X509Certificate) Utils.getKeyStore().getCertificate(alias);
+    }
+
+    public void updateCertInfo(X509Certificate cert)
+    {
+        setX509Subject(cert.getSubjectDN().getName());
+        byte[] subjectIdentifier = ECKeyAgreementEG.getCertificateSubjectKeyIdentifier(cert);
+        if (subjectIdentifier != null)
+            setX509SKI(Utils.HEX.b2H(subjectIdentifier));
     }
 
     public boolean isAllowedIP(String ip) {
@@ -464,11 +476,11 @@ public class RpaEntity {
             // fix it up.
             X509Certificate certificate = (X509Certificate)Utils.getKeyStore().getCertificate(getSecureMessagingCertificateAlias());
             x509Subject = certificate.getSubjectDN().getName();
+                setX509Subject(x509Subject);
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }
-        String x = canonicaliseSubject(x509Subject);
-        setX509Subject(x);
+
     }
 
     public String getwSuserid() {
@@ -601,6 +613,14 @@ public class RpaEntity {
 
     public void setSecureMessagingCertificateAlias(String secureMessagingCertificateAlias) {
         this.secureMessagingCertificateAlias = secureMessagingCertificateAlias;
+    }
+
+    public String getX509SKI() {
+        return x509SKI;
+    }
+
+    public void setX509SKI(String x509SKI) {
+        this.x509SKI = x509SKI;
     }
 
     public enum Type {
