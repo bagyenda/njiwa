@@ -101,7 +101,7 @@ public class RpaEntity {
     @Column(name = "entity_oid", nullable = false, columnDefinition = "TEXT")
     private String oid; //!< The OID is a unique string (ASN.1 OID format) that is used to identify the entity
     // world-wide
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String x509Subject; //!< This is the X.509 certificate's subject field. It is extracted from the
     // certificate itself
 

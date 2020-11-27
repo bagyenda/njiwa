@@ -24,6 +24,7 @@ import javax.inject.Inject;
 import javax.persistence.EntityManager;
 import javax.persistence.LockModeType;
 import javax.persistence.Query;
+import java.lang.reflect.ParameterizedType;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,6 +44,8 @@ public class GenericPeriodicProcessor<T> {
     ProcessQueue pq; //!< The processing queue
 
 
+    private Class<T> persistentClass;
+
     @Inject
     Instance<PersistenceUtility> poTasks;
 
@@ -58,6 +61,10 @@ public class GenericPeriodicProcessor<T> {
     private String redis_prefix = ""; //!< REDIS prefix to ensure we two different entity modules don't trample each other
     private ScheduledFuture jobHandler = null;
     private LockModeType lockOptions; //!< Whether to lock objects fetched from the database
+
+    public GenericPeriodicProcessor() {
+        this.persistentClass = (Class<T>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
+    }
 
     /**
      * @param em
@@ -139,7 +146,7 @@ public class GenericPeriodicProcessor<T> {
      * @param params    The JPA query parameters
      * @brief Start processing an entity class:
      */
-    protected final void start(boolean lock_wait, String name, String query, Map<String, Object> params) {
+    protected  void start(boolean lock_wait, String name, String query, Map<String, Object> params) {
 
         this.name = name;
         this.query = query;
@@ -163,7 +170,7 @@ public class GenericPeriodicProcessor<T> {
     /**
      * @brief Stop processing the entities
      */
-    protected final void stop() {
+    protected  void stop() {
         try {
             pq.stopIt();
             Utils.lg.info(String.format("Stopped Queue Processor [%s]", name));
@@ -195,6 +202,8 @@ public class GenericPeriodicProcessor<T> {
         // Over-ridden by subclass
     }
 
+
+
     /**
      * @brief The actual runner object/class.
      */
@@ -222,7 +231,8 @@ public class GenericPeriodicProcessor<T> {
                             @Override
                             public Object run(PersistenceUtility po, EntityManager em) throws Exception {
                                 try {
-                                    T obj = (T) em.find(Object.class, objId, lockOptions);
+
+                                    T obj = (T) em.find(persistentClass, objId, lockOptions);
                                     Object res = processTask(em, obj);
                                     afterTask(em, obj, res);
                                 } catch (Exception ex) {

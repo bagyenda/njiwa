@@ -148,13 +148,13 @@ public class ES3Impl {
         final RpaEntity sender = Authenticator.getUser(context); // Get the sender
 
         final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
-                ".1.1", "EnableProfile", "", ""));
+                ".1.1", "AuditEIS", "", ""));
         Long tr = CommonImpl.auditEIS(po,sender,eid,null,status, RpaEntity.Type.SMDP,senderEntity,receiverEntity,
                 messageId,validityPeriod,replyTo,messageType);
         if (tr == null)
              return new AuditEISResponse(startDate,Calendar.getInstance().getTime(),validityPeriod,status,null);
         resp.sendError(Response.Status.ACCEPTED.getStatusCode(), "");
-        return null;
+        return new AuditEISResponse(startDate,Calendar.getInstance().getTime(),validityPeriod,status,null);
     }
 
     @WebMethod(operationName = "SendData")

@@ -13,6 +13,7 @@
 package io.njiwa.common;
 
 import io.njiwa.common.model.ServerConfigurations;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.persistence.EntityManager;
 import java.io.ByteArrayOutputStream;
@@ -871,7 +872,7 @@ public class ServerSettings {
 
         public static final int DEFAULT_VALIDITY = 3600 * 24;
 
-        public static String jcaProvider = "BC";
+        public static String jcaProvider = BouncyCastleProvider.PROVIDER_NAME;
     }
 }
 /**

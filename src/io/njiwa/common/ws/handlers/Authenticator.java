@@ -273,10 +273,7 @@ public class Authenticator implements SOAPHandler<SOAPMessageContext> {
                                 try {
                                     // return new DOMSubTreeData(n,true);
                                     Utils.XML.removeRecursively(n, Node.COMMENT_NODE, null); // Remove comments
-                                    String xml = Utils.XML.getNodeString(n);
-                                    ByteArrayInputStream inputStream = new ByteArrayInputStream(xml.getBytes
-                                            (StandardCharsets.UTF_8));
-                                    return new OctetStreamData(inputStream);
+                                    return (NodeSetData) () -> Collections.singletonList(n).iterator();
                                 } catch (Exception ex) {
                                     return null;
                                 }

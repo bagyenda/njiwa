@@ -124,11 +124,7 @@ public class ES1SignatureVerifyHandler implements SOAPHandler<SOAPMessageContext
                 if (uri == null)
                     try {
                         Utils.XML.removeRecursively(signedInfo, Node.COMMENT_NODE, null); // Remove comments as per spec
-                       return  new NodeSetData() {
-                            public Iterator iterator() {
-                                return Collections.singletonList(signedInfo).iterator();
-                            }
-                        };
+                       return (NodeSetData) () -> Collections.singletonList(signedInfo).iterator();
                     } catch (Exception ex) {
                         return null;
                     }

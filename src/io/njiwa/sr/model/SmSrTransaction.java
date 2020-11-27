@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.model.TransactionsStatsListener;
 import io.njiwa.common.Utils;
+import io.njiwa.dp.model.SmDpTransaction;
 import io.njiwa.sr.transports.Transport;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
@@ -58,25 +59,25 @@ public class SmSrTransaction {
     @Column(nullable = false)
     private String eid; // The EID, if any
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "timestamp not null default current_timestamp")
     private
     Date messageDate; // When added
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "timestamp not null default current_timestamp")
     private
     Date expires;
     @Column(nullable = false, columnDefinition = "timestamp not null default current_timestamp", insertable = false)
     private
     Date nextSend;
-    @Column(nullable = false, insertable = false)
+    @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default '1970-01-01'")
     private
     Date lastSend;
-    @Column(nullable = false, insertable = false)
+    @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default '1970-01-01'")
     private
     Date lastupdate;
-    @Column(nullable = false, insertable = false)
+    @Column(nullable = false, insertable = false, columnDefinition = "int not null default 0")
     private
     Integer numberOfAttempts; // Will be reset to zero after each Ack
-    @Column(nullable = false, insertable = false, columnDefinition = "int4 not null default 0")
+    @Column(nullable = false, insertable = false, columnDefinition = "int not null default 0")
     private
     Integer numberOfTransactionsSent; // How many transactions have been sent. Including retries
     @Column(nullable = false, insertable = false, columnDefinition = "int not null default 0")
@@ -105,7 +106,7 @@ public class SmSrTransaction {
     @Column(columnDefinition = "text", insertable = false, name = "requestid")
     private
     String lastrequestID;
-    @Column(nullable = false, columnDefinition = "TEXT NOT NULL")
+    @Column(nullable = false, columnDefinition = "TEXT NOT NULL Default 'Ready'")
     @Enumerated(EnumType.STRING)
     private
     Status status;
@@ -155,6 +156,7 @@ public class SmSrTransaction {
         if (eis != null)
             setEis_id(eis.getId());
         setEid(eis_id);
+        setStatus(Status.Ready);
     }
 
     public SmSrTransaction(String messageType, String messageID, String responseEndPoint, long
@@ -172,7 +174,7 @@ public class SmSrTransaction {
         setMessageID(messageID);
         setMessageDate(mdate);
         setExpires(edate);
-
+        setStatus(Status.Ready);
         setResponseEndPoint(responseEndPoint);
         setMessageType(messageType);
         setTransactionData(transObj); // Capture the object

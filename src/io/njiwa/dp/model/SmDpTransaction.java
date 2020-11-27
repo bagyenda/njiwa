@@ -60,13 +60,13 @@ public class SmDpTransaction {
     @Column(nullable = false)
     private
     Date expires;
-    @Column(nullable = false, insertable = false)
+    @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default current_timestamp")
     private
     Date lastResponse;
-    @Column(nullable = false, insertable = false)
+    @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default '1970-01-01'")
     private
     Date lastSend;
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "timestamp not null default '1970-01-01'")
     private
     String transactionType; // The textual representation of the transaction type
     @Column(nullable = false, columnDefinition = "text not null default ''")

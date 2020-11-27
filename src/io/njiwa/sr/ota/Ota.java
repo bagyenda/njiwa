@@ -1030,7 +1030,7 @@ public class Ota {
                 engine = key.length == 8 ? "DES64" : "DESEDE64";
                 keytype = (key.length == 16 || key.length == 24) ? "DESede" : "DES";
             }
-            javax.crypto.Mac mac = javax.crypto.Mac.getInstance(engine);
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance(engine, ServerSettings.Constants.jcaProvider);
             SecretKey keySpec = new SecretKeySpec(key, keytype);
             IvParameterSpec iv = new IvParameterSpec(new byte[8]); // Empty iv
             mac.init(keySpec, iv);
