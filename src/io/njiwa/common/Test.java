@@ -21,16 +21,8 @@ import io.njiwa.dp.pedefinitions.EUICCResponse;
 import io.njiwa.dp.pedefinitions.ProfileElement;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.transports.Transport;
-import org.bouncycastle.asn1.ASN1Object;
-import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.ASN1Sequence;
-import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
-import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
-import org.bouncycastle.openssl.jcajce.JcaMiscPEMGenerator;
 import org.bouncycastle.util.io.pem.PemObject;
-import org.bouncycastle.util.io.pem.PemObjectGenerator;
 import org.bouncycastle.util.io.pem.PemReader;
-import org.bouncycastle.util.io.pem.PemWriter;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.Singleton;
@@ -41,7 +33,6 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -56,21 +47,6 @@ public class Test {
     @Inject
     PersistenceUtility po;
 
-
-    private void saveRpaEntity(final RpaEntity rpaEntity) {
-        po.doTransaction(new PersistenceUtility.Runner<Object>() {
-            @Override
-            public Object run(PersistenceUtility po, EntityManager em) throws Exception {
-                em.persist(rpaEntity);
-                return false;
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
-        });
-    }
 
     /**
      * @param em
@@ -169,165 +145,7 @@ public class Test {
         String res = r.toString();
     }
 
-    private void writeCert(Writer f, X509Certificate certificate) {
-        PemWriter pw = new PemWriter(f);
-        try {
-            PemObjectGenerator po = new JcaMiscPEMGenerator(certificate);
-            pw.writeObject(po);
-            pw.flush();
-        } catch (Exception e) {
-            String xs = e.getMessage();
-        }
-    }
 
-    private void writeKey(Writer f, PrivateKey pf) {
-        PemWriter pw = new PemWriter(f);
-
-        PrivateKeyInfo i = PrivateKeyInfo.getInstance(ASN1Sequence.getInstance(pf.getEncoded()));
-        ASN1ObjectIdentifier iis = i.getPrivateKeyAlgorithm().getAlgorithm();
-        ASN1ObjectIdentifier ois = X9ObjectIdentifiers.id_ecPublicKey;
-
-
-        try {
-            ASN1Object o = (ASN1Object) i.parsePrivateKey();
-            pw.writeObject(new PemObject("EC PRIVATE KEY", o.getEncoded("DER")));
-            pw.flush();
-        } catch (Exception ex) {
-            String xs = ex.getMessage();
-        }
-    }
-
-    private void verifySignedData(byte[] sig, byte[] sdata, X509Certificate certificate) throws Exception {
-
-        // Verify it
-        byte[] data = Utils.ECC.verifypkcs7sig(sig, certificate);
-        if (!Arrays.equals(data, sdata))
-            throw new Exception("Invalid!");
-
-    }
-
-    /*
-     * @brief Generate test data for use in UI loading (all in /tmp):
-     *  @detail
-     *  - generates eum.pem containing eum certificate
-     *  - generates sm-sr.pem containing our (local) sm-sr certificate and private key (unencrypted)
-     *  - generates sm-dp.pem containing our (local) sm-dp certificate and private key (unencrypted)
-     *  - generates sm-sr-signed.data CI signed sm-sr data
-     *  - generates sm-sd-signed.data CI signed sm-sd data
-     */
-    private void genbootstrapdata() throws Exception {
-
-        KeyStore ciKeyStore = Utils.loadKeyStore("/tmp/ci.jks", "testing1234", false);
-        // Get CI Private key
-        PrivateKey ciPkey = (PrivateKey) ciKeyStore.getKey("ci", "testing1234".toCharArray());
-        X509Certificate ciCert = (X509Certificate) ciKeyStore.getCertificate("ci");
-
-
-        KeyStore ks = Utils.loadKeyStore("/tmp/server.jks", "test1234", false);
-        Writer f = new FileWriter("/tmp/eum.pem");
-
-        // Write eum stuff
-        X509Certificate certificate = (X509Certificate) ks.getCertificate("eum-ec");
-        writeCert(f, certificate);
-        f.close();
-
-        // Write sm-sr stuff
-
-        f = new FileWriter("/tmp/sm-sr.pem");
-        certificate = (X509Certificate) ks.getCertificate("sm-sr");
-
-        writeCert(f, certificate);
-
-        PrivateKey privateKey = (PrivateKey) ks.getKey("sm-sr", "test1234".toCharArray());
-        writeKey(f, privateKey);
-        f.close();
-
-        String iin = "433322233334444";
-        byte[] sdata = ECKeyAgreementEG.makeCertSigningData(certificate,
-                2,
-                ECKeyAgreementEG.SM_SR_DEFAULT_DISCRETIONARY_DATA, ECKeyAgreementEG.DST_VERIFY_KEY_TYPE);
-
-        byte[] sig = Utils.ECC.genpkcs7sig(sdata, certificate, ciPkey);
-
-
-        OutputStream of = new FileOutputStream("/tmp/sm-sr-signed.data");
-        of.write(sig);
-        of.close();
-
-        of = new FileOutputStream("/tmp/sm-sr-signing.data");
-        of.write(sdata);
-        of.close();
-
-        verifySignedData(sig,sdata,ciCert);
-
-        // write sm-dp stuff
-        f = new FileWriter("/tmp/sm-dp.pem");
-        certificate = (X509Certificate) ks.getCertificate("sm-dp");
-        writeCert(f, certificate);
-
-        privateKey = (PrivateKey) ks.getKey("sm-dp", "test1234".toCharArray());
-        writeKey(f, privateKey);
-        f.close();
-
-        iin = "533322233335555";
-        sdata = ECKeyAgreementEG.makeCertSigningData(certificate,
-                1,
-                ECKeyAgreementEG.SM_DP_DEFAULT_DISCRETIONARY_DATA,
-                 ECKeyAgreementEG.DST_VERIFY_KEY_TYPE);
-
-        sig = Utils.ECC.genpkcs7sig(sdata, certificate, ciPkey);
-
-        of = new FileOutputStream("/tmp/sm-dp-signed.data");
-        of.write(sig);
-        of.close();
-
-        of = new FileOutputStream("/tmp/sm-dp-signing.data");
-        of.write(sdata);
-        of.close();
-
-        verifySignedData(sig,sdata,ciCert);
-
-    }
-/*
-    private void bootstrapKeysDB() throws Exception {
-        X509Certificate certificate;
-
-        KeyStore ks = Utils.loadKeyStore("/tmp/server.jks", "test1234", false);
-
-        // Get EUM
-        certificate = (X509Certificate) ks.getCertificate("eum");
-        RpaEntity eum = new RpaEntity(RpaEntity.Type.EUM, "eum", null, "1.3.6.1.4.1.1234568.1", false, null,
-                (byte) 00, null, certificate.getSubjectDN().getName());
-        saveRpaEntity(eum);
-        certificate = (X509Certificate) ks.getCertificate("mno");
-        RpaEntity mno = new RpaEntity(RpaEntity.Type.MNO, "mno", null, "1.3.6.1.4.1.1234561.1", false, null,
-                (byte) 00, null, certificate.getSubjectDN().getName());
-        saveRpaEntity(mno);
-
-        // Handle SM-DP and SM-SR. But first, load CI jks from /tmp. Right?
-        KeyStore ciKeyStore = Utils.loadKeyStore("/tmp/ci.jks", "test1234", false);
-        // Get CI Private key
-        PrivateKey ciPkey = (PrivateKey) ciKeyStore.getKey("ci", "test1234".toCharArray());
-        certificate = (X509Certificate) ks.getCertificate("sm-sr");
-
-        byte[] sig = ECKeyAgreementEG.genCertificateSignature(ciPkey, certificate,
-                ECKeyAgreementEG.SM_SR_CERTIFICATE_TYPE,
-                ECKeyAgreementEG.SM_SR_DEFAULT_DISCRETIONARY_DATA, (byte) 0, ECKeyAgreementEG.DST_VERIFY_KEY_TYPE);
-        RpaEntity sr = new RpaEntity(RpaEntity.Type.SMSR, "sm-sr-ws", "sm-sr", "1.3.6.1.4.1.1234569.22", true,
-                ECKeyAgreementEG.SM_SR_DEFAULT_DISCRETIONARY_DATA, (byte) 0, sig, certificate.getSubjectDN().getName());
-
-        saveRpaEntity(sr);
-
-        certificate = (X509Certificate) ks.getCertificate("sm-dp");
-        sig = ECKeyAgreementEG.genCertificateSignature(ciPkey, certificate,
-                ECKeyAgreementEG.SM_DP_CERTIFICATE_TYPE,
-                ECKeyAgreementEG.SM_DP_DEFAULT_DISCRETIONARY_DATA, (byte) 0, ECKeyAgreementEG.DST_VERIFY_KEY_TYPE);
-        RpaEntity dp = new RpaEntity(RpaEntity.Type.SMDP, "sm-dp-ws", "sm-dp", "1.3.6.1.4.1.1234569.2", true,
-                ECKeyAgreementEG.SM_DP_DEFAULT_DISCRETIONARY_DATA, (byte) 0, sig, certificate.getSubjectDN().getName());
-
-        saveRpaEntity(dp);
-    }
-*/
     private List testReadPT() throws Exception {
         FileInputStream f = new FileInputStream("/tmp/8991800099110000870.der");
         byte[] b = new byte[f.available()];
@@ -389,6 +207,9 @@ public class Test {
             //  outputKeyCerts();
 
             //   testReadPT();
+
+        //    javax.crypto.Mac mac = javax.crypto.Mac.getInstance("DES", ServerSettings.Constants.jcaProvider);
+         //       mac = javax.crypto.Mac.getInstance("AESCMAC", ServerSettings.Constants.jcaProvider);
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }

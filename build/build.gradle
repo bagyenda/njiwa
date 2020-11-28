@@ -36,8 +36,9 @@ dependencies {
     compile "commons-net:commons-net:3.6"
     providedCompile "log4j:log4j:1.2.17"
 
-    compile "org.bouncycastle:bcpkix-jdk15on:1.62"
-    compile "org.bouncycastle:bcprov-ext-jdk15on:1.62"
+    providedCompile "org.bouncycastle:bcpkix-jdk15on:1.67"
+    providedCompile "org.bouncycastle:bcprov-ext-jdk15on:1.66"
+    compile "org.bouncycastle:bctls-jdk15on:1.67"
     providedCompile "org.hibernate:hibernate-core:5.4.1.Final"
     providedCompile "org.hibernate.common:hibernate-commons-annotations:5.1.0.Final"
     providedCompile "org.jboss.resteasy:resteasy-multipart-provider:4.0.0.Beta8"

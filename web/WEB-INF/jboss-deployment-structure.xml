@@ -20,6 +20,8 @@
 -->
           <!--  <module name="org.jboss.security.xacml" /> -->
 
+            <!-- bouncy castle needs to be globally deployed to avoid JCE errors -->
+            <module name="org.bouncycastle" slot="main" export="true" />
             <module name="org.dom4j"/>
             <module name="io.njiwa"/>
         </dependencies>

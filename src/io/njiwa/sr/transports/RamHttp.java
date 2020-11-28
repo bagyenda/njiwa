@@ -26,7 +26,8 @@ import io.njiwa.sr.model.SecurityDomain;
 import io.njiwa.sr.model.SmSrTransaction;
 import io.njiwa.sr.model.SmSrTransactionRequestId;
 import io.njiwa.sr.ota.Ota;
-import org.bouncycastle.crypto.tls.*;
+import org.bouncycastle.tls.*;
+import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto;
 import org.bouncycastle.util.Strings;
 
 import javax.annotation.PostConstruct;
@@ -794,10 +795,9 @@ public class RamHttp extends Transport {
             @Override
             public void run() {
                 try {
-                    SecureRandom srand = new SecureRandom();
+                   // SecureRandom srand = new SecureRandom();
 
-                    TlsServerProtocol s = new TlsServerProtocol(socket.getInputStream(), socket.getOutputStream(),
-                            srand);
+                    TlsServerProtocol s = new TlsServerProtocol(socket.getInputStream(), socket.getOutputStream());
                     final PskTlsServ tlsServer = new PskTlsServ();
                     s.accept(tlsServer);
                     final InputStream in = s.getInputStream();
@@ -905,18 +905,18 @@ public class RamHttp extends Transport {
             private IdentityManager identityManager;
 
             public PskTlsServ() {
-                super(new IdentityManager());
+                super(new BcTlsCrypto(new SecureRandom()), new IdentityManager());
                 identityManager = (IdentityManager) this.pskIdentityManager;
             }
 
             // Cipher suites
             @Override
-            protected int[] getCipherSuites() {
+            public int[] getCipherSuites() {
                 return new int[]{CipherSuite.TLS_PSK_WITH_3DES_EDE_CBC_SHA,
                         CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA,
                         CipherSuite.TLS_PSK_WITH_AES_128_GCM_SHA256,
                         CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA256,
-                        CipherSuite.TLS_PSK_WITH_NULL_SHA,
+                       // CipherSuite.TLS_PSK_WITH_NULL_SHA,
                         CipherSuite.TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA,
                         CipherSuite.TLS_RSA_PSK_WITH_AES_128_CBC_SHA};
             }
@@ -927,14 +927,16 @@ public class RamHttp extends Transport {
 
 
             @Override
-            protected ProtocolVersion getMaximumVersion() {
+            public ProtocolVersion getMaximumVersion() {
                 return ProtocolVersion.TLSv12;
             }
 
-            @Override
-            protected ProtocolVersion getMinimumVersion() {
-                return ProtocolVersion.TLSv10;
+
+            protected ProtocolVersion[] getSupportedVersions()
+            {
+                return ProtocolVersion.TLSv12.only();
             }
+
 
             @Override
             public ProtocolVersion getServerVersion() throws IOException {
