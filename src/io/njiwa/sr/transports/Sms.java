@@ -168,6 +168,7 @@ public class Sms extends Transport {
         // Make the time
         Utils.Pair<byte[], Integer> smsc = Utils.makePhoneNumber(ServerSettings.getVsmsc_number().getBytes(StandardCharsets.UTF_8));
 
+        // Make an SMS-DELIVER PDU - Sec 9.2.2.1 of GSM 03.40
         /* TP-UDHI: Page 36 of GSM 03.40 gives order */
         int h1 = (udh != null && udh.length > 0) ? (1 << 6) : 0;
         ByteArrayOutputStream tpdu = new ByteArrayOutputStream();
@@ -713,7 +714,7 @@ public class Sms extends Transport {
 
                         dev.lastUse = Calendar.getInstance().getTime(); // Indicate latest usage.
 
-                        // This is the SMS TDPU parsing a la GSM 03.40
+                        // This is the SMS TDPU parsing a la GSM 03.40. This is an SMS-SUBMIT packet (see sec 9.2.2.2)
                         int udhi = (ch >> 6) & 0x01;
                         int x = (ch >> 3) & 0x03;
                         int vp_len = (x == 0) ? 0 : (x == 2) ? 1 : 7;

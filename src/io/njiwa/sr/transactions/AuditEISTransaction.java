@@ -46,7 +46,8 @@ public class AuditEISTransaction extends SmSrBaseTransaction {
         this.requestor = requestor.getId();
         this.iccids = iccids;
         ProfileInfo p;
-        addAPDU(new SDCommand.APDU(0x80, 0xCA, 0xFF, 0x21, null)); // Get main card info.
+        // Sec 4.1.1.5 of SGP 02 v4.1
+        addAPDU(new SDCommand.APDU(0x80, 0xCA, 0xFF, 0x21, null, (short)0)); // Get main card info.
         // Then get the apps
         List<ProfileInfo> l = eis.getProfiles();
         List<ProfileInfo> targetList;

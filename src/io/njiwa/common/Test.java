@@ -193,11 +193,29 @@ public class Test {
         }
     }
 
+    private void testPP() { // Test parse an SMS-DELIVER
+        byte[] x = {0x40, 0x05, (byte)0x81, 0x12, 0x50, (byte)0xF3, (byte)0x96, (byte)0xF6, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22};
+        int pos = 1;
+        int num_len = x[pos++];
+        Utils.Pair<String, Integer> pres = Utils.parsePhoneFromSemiOctets(x,num_len,pos);
+        int da_len = pres.l;
+        String to = pres.k;
+        pos += da_len;
+        int tp_pid = x[pos];
+        pos++;
+        int tp_dcs = x[pos];
+        pos++;
+        int scts_pos = pos;
+        byte[] scts = Arrays.copyOfRange(x,scts_pos, scts_pos+7);
+        Utils.lg.warning("Test" + tp_dcs);
+    }
     @PostConstruct
     public void atStart() {
         // Test DB
 
         try {
+
+            testPP();
 
             // readKeys("/tmp/sm-sr.pem");
             //      bootstrapKeysDB();

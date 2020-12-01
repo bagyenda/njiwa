@@ -161,7 +161,7 @@ public class ServerSettings {
 
             put(VIRTUAL_SMSC_PORT, new IntegerValuesValidator(8182));
 
-            put(VIRTUAL_SMSC_NUMBER, new BaseValidator("1000"));
+            put(VIRTUAL_SMSC_NUMBER, new BaseValidator("21053"));
             put(VIRTUAL_SMSC_NUMBER_PREFIX, new BaseValidator("8000"));
 
             put(VIRTUAL_SMSC_SHORTCODES, new StringListValidator(new String[]{"1000", "+256772865416"},
@@ -871,8 +871,11 @@ public class ServerSettings {
                 release);
 
         public static final int DEFAULT_VALIDITY = 3600 * 24;
+        public static final boolean useIndefiniteCodingInExpandedFormat = false; // SGP.11 v4.1 appendix H spec say no...
 
         public static String jcaProvider = BouncyCastleProvider.PROVIDER_NAME;
+
+        public static long DEFAULT_PERIODIC_STARTUP_DELAY = 30*1000; // Milliseconds
     }
 }
 /**

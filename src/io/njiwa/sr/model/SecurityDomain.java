@@ -167,16 +167,17 @@ public class SecurityDomain {
 
     public String firstTAR() {
         try {
-            return Utils.tarFromAid(getAid()); // Return it from AID
+            return getTARsAsList()[0];
         } catch (Exception ex) {
         }
 
         try {
-            return getTARsAsList()[0];
+            return Utils.tarFromAid(getAid()); // Return it from AID
         } catch (Exception ex) {
-            return "000000";
+
         }
 
+        return "000000";
     }
 
     public List<KeySet> getKeysets() {

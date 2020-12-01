@@ -120,7 +120,7 @@ public class KeyComponent {
                 keytype = kv.length == 16 ? 0x05 : 0x09;
                 break;
             case AES:
-                keytype = 0; // Section 2.4.3 of SGP-02 v3
+                keytype = 0x02; // Appendix D of SGP.11 v4.1
                 break;
             default:
                 keytype = 0x3;

@@ -703,10 +703,11 @@ public class Utils {
         return o instanceof Long && 0L == (Long) o;
     }
 
+
     public static String tarFromAid(String aid) {
-        // In accordance with SGP-02-v3-0 Annex H
+        // In accordance with SGP-02-v4.1 Annex H
         String pix = pixFromAid(aid);
-        return pix.substring(8, 14);
+        return pix.substring(14, 19);
     }
 
     public static String pixFromAid(String aid) {

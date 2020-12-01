@@ -12,8 +12,8 @@
 
 package io.njiwa.sr.ota;
 
-import io.njiwa.common.ServerSettings;
 import io.njiwa.common.SDCommand;
+import io.njiwa.common.ServerSettings;
 import io.njiwa.common.StatsCollector;
 import io.njiwa.common.Utils;
 import io.njiwa.common.model.Key;
@@ -25,6 +25,12 @@ import io.njiwa.sr.SmSrTransactionsPeriodicProcessor;
 import io.njiwa.sr.model.*;
 import io.njiwa.sr.transports.Sms;
 import io.njiwa.sr.transports.Transport;
+import org.bouncycastle.crypto.BlockCipher;
+import org.bouncycastle.crypto.engines.AESEngine;
+import org.bouncycastle.crypto.engines.DESEngine;
+import org.bouncycastle.crypto.engines.DESedeEngine;
+import org.bouncycastle.crypto.macs.CMac;
+import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import javax.crypto.Cipher;
@@ -54,7 +60,6 @@ public class Ota {
     public static final short R_APDU_TAG = 0x23;
     public static final short Immediate_Action_TAG = 0x81;
     public static final short Script_Chaining_TAG = 0x83;
-    public static final short CAPDU_TAG = 0x22;
     public static final short Error_Action_Tag = 0x82;
     public static final short Command_Scripting_Template_Tag = 0xAA;
     public static final short Response_Scripting_Template_Tag = 0xAB;
@@ -67,7 +72,6 @@ public class Ota {
             KeyComponent.Type.DES_ECB, KeyComponent.Type.DES, KeyComponent.Type.TripleDES, KeyComponent.Type
             .TripleDES_CBC, KeyComponent.Type.AES
     };
-    private static final boolean useIndefiniteCodingInExpandedFormat = true;
 
     static {
         // Initialise the default TAR
@@ -254,13 +258,15 @@ public class Ota {
         boolean hasRc = (spi1 & 0x01) != 0 && (spi1 & 0x02) == 0;
 
         if ((spi1 & 0x03) == 0 && !has_enc)
-            return new Utils.Pair<byte[], Integer>(in, 0); // No padding required
+            return new Utils.Pair<>(in, 0); // No padding required
 
-        int len = 5 + 1 + (cryptoCrc ? 8 : (hasRc ? 4 : 0)) + in.length;
+        int ccLen = (cryptoCrc ? 8 : (hasRc ? 4 : 0));
+
+        int len = 5 + 1 + ccLen + in.length; // CNTR (5 bytes) + PCNTR (1 byte) + CCLen (variable) -- Table 2 of ETSI TS 102 225
 
         int padTo;
         if (has_enc || cryptoCrc)
-            padTo = 8;
+            padTo = 16; // We use AES, so pad to 16 always...
         else if (hasRc)
             padTo = 4;
         else
@@ -276,7 +282,7 @@ public class Ota {
         } else
             padCtr = 0;
 
-        return new Utils.Pair<byte[], Integer>(in, padCtr);
+        return new Utils.Pair<>(in, padCtr);
     }
 
     public static boolean spiHasCryptoCrc(int spi1) {
@@ -316,13 +322,6 @@ public class Ota {
         cpl += pad_ctr;
        /* BIP packet includes CPI and cpl is tlv_encoded. For sms cpl = 2 bytes */
         return cpl + (hasCpi ? (1 + Utils.BER.getTlvLength(cpl)) : 2);
-    }
-
-    public static int estimatePkLen(int dlen, ExpectedOtaResponseFormat format) {
-        // Header length is shorter for the indefinite form
-        int hdrLen = useIndefiniteCodingInExpandedFormat ? 1 + 1 : 1 + Utils.BER.getTlvLength(dlen);
-
-        return hdrLen + dlen;
     }
 
     /**
@@ -476,8 +475,8 @@ public class Ota {
             throw new Exception("Invalid TAR length");
         boolean enc = ((spi1 >> 2) & 0x01) != 0;
         boolean crypto_crc = ((spi1 >> 1) & 0x1) != 0;
-        int encType = enc ? (kic_byte & 0x0F) : DES_NONE;
-
+        // int encType = enc ? (kic_byte & 0x0F) : DES_NONE;
+        // int crcType = crypto_crc ? (kid_byte & 0x0f) : DES_NONE;
         Utils.Pair<byte[], Integer> px = padData(in, spi1, enc);
         in = px.k;
         int pcntr = px.l;
@@ -512,7 +511,7 @@ public class Ota {
     /* crc on cpl + chl + spi + KIc + KID + TAR + CNTR + */
         byte[] crc = Checksum.get(spi1, kid_byte, kid, osPkg.toByteArray(), counter, pcntr, in);
         // Utils.lg.info(String.format("CRC: [%s]", Utils.b2H(crc)) );
-        if (encType == DES_NONE) {
+        if (!enc) {
             osPkg.write(counter);
             osPkg.write(pcntr);
             osPkg.write(crc);
@@ -606,7 +605,7 @@ public class Ota {
             }
         };
         ByteArrayOutputStream xos = new ByteArrayOutputStream();
-        if (useIndefiniteCodingInExpandedFormat) {
+        if (ServerSettings.Constants.useIndefiniteCodingInExpandedFormat) {
             xos.write(new byte[]{
                     (byte) Command_Scripting_Template_for_Indefinite_Length_Tag,
                     (byte) 0x80
@@ -640,7 +639,7 @@ public class Ota {
 
         ScriptChaining chainingType = ScriptChaining.fromOTAParams(startIndex, l.size());
         final byte[] sdata = chainingType.toBytes(); // Put script chaining data in first
-        int cursize = sdata.length + (useIndefiniteCodingInExpandedFormat ? 2 : 1 + 4); // Assume that definite coding
+        int cursize = sdata.length + (ServerSettings.Constants.useIndefiniteCodingInExpandedFormat ? 2 : 1 + 4); // Assume that definite coding
         // has a tag+length of 5, followed by chaining if any
 
         ByteArrayOutputStream odata = new ByteArrayOutputStream() {
@@ -665,21 +664,25 @@ public class Ota {
 
         // Now wrap the whole thing in a Command Scripting Template TAG
         ByteArrayOutputStream xos = new ByteArrayOutputStream();
-        if (useIndefiniteCodingInExpandedFormat) {
+        byte[] commandTlvs = odata.toByteArray();
+        if (ServerSettings.Constants.useIndefiniteCodingInExpandedFormat) {
             xos.write(
                     new byte[]{
                             (byte) Command_Scripting_Template_for_Indefinite_Length_Tag,
                             (byte) 0x80
                     });
-            xos.write(odata.toByteArray());
+            xos.write(commandTlvs);
             xos.write(new byte[]{0x00, 0x00}); // As per Sec 5.2.1 of ETSI TS 102 226 v12
+        } else { // Use definite coding.
+            xos.write(Command_Scripting_Template_Tag);
+            Utils.BER.appendTLVlen(xos, commandTlvs.length);
+            xos.write(commandTlvs);
         }
-
 
         otaParams.allowChaining = false; // Prevent chaining. Right?
 
 
-        return new Utils.Pair<byte[], Integer>(xos.toByteArray(), i);
+        return new Utils.Pair<>(xos.toByteArray(), i);
     }
 
     /**
@@ -837,8 +840,8 @@ public class Ota {
                     break;
             }
             return new byte[]{
-                    0x01,
                     (byte) Ota.Script_Chaining_TAG,
+                    0x01,
                     val
             };
         }
@@ -851,7 +854,7 @@ public class Ota {
         public static final int DES_CBC = 0x01;
         public static final int TRIBLE_DES_CBC2 = 0x05;
         public static final int TRIBLE_DES_CBC3 = 0x09;
-        public static final int AES_CBC = 0x00; // Sec 2.4.3 of SGP-02 v3.0 makes this the default
+        public static final int AES_CBC = 0x02; // SGP.02 v4.1 Appendix D says this should be 0x2
 
         static {
             // Need to add BouncyCastle as our provider here...
@@ -867,13 +870,12 @@ public class Ota {
          * @brief Perform the encryption of the OTA package as required. Use The Bouncy Castle package to provide cryptographic
          * services
          */
-        private static byte[] perform(byte[] in, byte[] key, int keyType, int mode) throws Exception {
-
-
-            return perform(in, key, mode, keyType, new byte[8]); // With empty IV
+        private static byte[] perform(byte[] in, int keyType, byte[] key, int mode) throws Exception {
+            byte[] iv = keyType == AES_CBC ? new byte[16] : new byte[8];
+            return perform(in,keyType, key,   mode, iv); // With empty IV
         }
 
-        public static byte[] perform(byte[] in, byte[] key, int keyType, int mode, byte[] inputIv) throws Exception {
+        public static byte[] perform(byte[] in, int keyType,  byte[] key, int mode, byte[] inputIv) throws Exception {
             IvParameterSpec iv = new IvParameterSpec(inputIv);
 
             // Encrypt based key size
@@ -890,7 +892,7 @@ public class Ota {
 
             SecretKey keySpec = new SecretKeySpec(key, xkeytype);
 
-            Cipher cipher = Cipher.getInstance(xkeytype + "/CBC/NoPadding");
+            Cipher cipher = Cipher.getInstance(xkeytype + "/CBC/NoPadding", ServerSettings.Constants.jcaProvider);
             cipher.init(mode, keySpec, iv);
 
             byte[] out = cipher.doFinal(in);
@@ -906,7 +908,7 @@ public class Ota {
          * @brief Perform DES encryption
          */
         public static byte[] encrypt(byte[] in, byte[] key, int keyType) throws Exception {
-            return perform(in, key, keyType, Cipher.ENCRYPT_MODE);
+            return perform(in, keyType, key, Cipher.ENCRYPT_MODE);
         }
 
         /**
@@ -917,7 +919,7 @@ public class Ota {
          * @brief Perform DES decryption
          */
         public static byte[] decrypt(byte[] in, byte[] key, int keyType) throws Exception {
-            return perform(in, key, keyType, Cipher.DECRYPT_MODE);
+            return perform(in, keyType, key,  Cipher.DECRYPT_MODE);
         }
 
     }
@@ -1013,31 +1015,24 @@ public class Ota {
 
             if (key.length < 8 || key.length > 24)
                 throw new Exception("Invalid key size. Must be a multiple of 8, 16 or 24 bytes");
-
-
-            // Get crypto mac. Which must be 8 bytes.
-
-
-            //  Utils.lg.info(String.format("Crypto CRC IN: %s", Utils.b2H(in)));
-
-
-            String engine;
-            String keytype;
+            BlockCipher cipher;
+            int finalLen;
+            // The cc must be 8 bytes for AES and 4 bytes for all else.
+            // Ref Sec 8.2.1.5.1  of ETS TS 102 226 rel 9
             if (mode == Crypt.AES_CBC) {
-                engine = "AESCMAC";
-                keytype = "AES";
+                finalLen = 8;
+                cipher = new AESEngine();
             } else {
-                engine = key.length == 8 ? "DES64" : "DESEDE64";
-                keytype = (key.length == 16 || key.length == 24) ? "DESede" : "DES";
+                finalLen = 4;
+                cipher = key.length == 8 ? new DESEngine() : new DESedeEngine();
             }
-            javax.crypto.Mac mac = javax.crypto.Mac.getInstance(engine, ServerSettings.Constants.jcaProvider);
-            SecretKey keySpec = new SecretKeySpec(key, keytype);
-            IvParameterSpec iv = new IvParameterSpec(new byte[8]); // Empty iv
-            mac.init(keySpec, iv);
-            mac.update(in);
+            CMac cmac = new CMac(cipher);
+            cmac.init(new KeyParameter(key));
+            cmac.update(in,0,in.length);
+            byte[] out = new byte[cmac.getMacSize()];
+            cmac.doFinal(out, 0);
 
-            byte[] out = mac.doFinal();
-            return out;
+            return Arrays.copyOf(out,finalLen);
         }
 
 
