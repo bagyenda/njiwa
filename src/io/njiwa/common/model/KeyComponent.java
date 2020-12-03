@@ -29,6 +29,10 @@ import javax.persistence.*;
 @DynamicUpdate
 @DynamicInsert
 public class KeyComponent {
+    public static final KeyComponent.Type[] suitableTS102225Types = {
+            KeyComponent.Type.DES_ECB, KeyComponent.Type.DES, KeyComponent.Type.TripleDES, KeyComponent.Type
+            .TripleDES_CBC, KeyComponent.Type.AES
+    };
     @Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "keycomponent")

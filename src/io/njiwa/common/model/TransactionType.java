@@ -15,6 +15,7 @@ package io.njiwa.common.model;
 import io.njiwa.common.PersistenceUtility;
 import io.njiwa.common.SDCommand;
 import io.njiwa.common.Utils;
+import io.njiwa.sr.ota.Ota;
 
 
 import javax.ejb.Asynchronous;
@@ -34,6 +35,18 @@ public abstract class TransactionType {
     public int lastIndex = 0; //!< where we stopped last in apdu list
     // *** End SM-SR stuff **
     public Long requestingEntityId; //!< The requesting RPA entity
+
+    private Ota.ResponseHandler.ETSI102226APDUResponses responses;
+
+    public void setResponses(Ota.ResponseHandler.ETSI102226APDUResponses responses)
+    {
+        this.responses = responses;
+    }
+
+    public Ota.ResponseHandler.ETSI102226APDUResponses getResponses()
+    {
+        return responses;
+    }
 
     public TransactionType() {
     }

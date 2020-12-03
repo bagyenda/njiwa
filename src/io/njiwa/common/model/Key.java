@@ -149,6 +149,7 @@ public class Key {
         }
     }
 
+
     public KeyComponent findSuitableKeycomponent(KeyComponent.Type[] types) {
         try {
             for (KeyComponent kc : getKeyComponents())

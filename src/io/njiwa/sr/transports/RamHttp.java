@@ -420,7 +420,7 @@ public class RamHttp extends Transport {
                 SmSrTransaction bt = em.find(SmSrTransaction.class, tid, LockModeType.PESSIMISTIC_WRITE);
                 TransactionType tobj = bt.getTransObject();
                 byte[] output = rp.getData();
-                Utils.Triple<Boolean, Boolean, String> xres = Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
+                Utils.Quad<Boolean, Boolean, String,Ota.ResponseHandler.ETSI102226APDUResponses> xres = Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
                 boolean success = xres.k; // Whether success
                 String xstatus = xres.m;
 

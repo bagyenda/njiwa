@@ -68,10 +68,6 @@ public class Ota {
     public static final short Number_of_Executed_C_APDUS_Tag = 0x80;
     public static final short Immediate_Action_Response_Tag = 0x81;
     public static final short Bad_Format_Tag = 0x90;
-    private static final KeyComponent.Type[] suitableTS102225Types = {
-            KeyComponent.Type.DES_ECB, KeyComponent.Type.DES, KeyComponent.Type.TripleDES, KeyComponent.Type
-            .TripleDES_CBC, KeyComponent.Type.AES
-    };
 
     static {
         // Initialise the default TAR
@@ -88,37 +84,37 @@ public class Ota {
      * @throws Exception
      * @brief Remove and verify the 03.48/SCP 08 packaging from a received message
      */
-    public static Utils.Pair<byte[], Params> unpackSCP80(byte[] input, Transport.TransportType transportType,
+    public static Utils.Triple<byte[], Params,Eis> unpackSCP80(byte[] input, Transport.TransportType transportType,
                                                          String msisdn, byte[] udh, EntityManager em) throws Exception {
 
 // Check the UDH, then...
 
         ByteArrayInputStream is = new ByteArrayInputStream(input);
         int rpi;
-        int cpl;
-        int chl;
+        int rpl;
+        int rhl;
         boolean isResp;
         SecurityDomain sd = null;
         ProfileInfo p = null;
 
         if (transportType != Transport.TransportType.SMS) { // e.g bip
             rpi = is.read();
-            cpl = Utils.BER.decodeTLVLen(is);
-            chl = Utils.BER.decodeTLVLen(is);
+            rpl = Utils.BER.decodeTLVLen(is);
+            rhl = Utils.BER.decodeTLVLen(is);
 
             isResp = rpi == 0x02 || rpi == 0x04;
         } else {
-            cpl = (int) Utils.BER.decodeInt(is, 2);
-            chl = is.read();
+            rpl = (int) Utils.BER.decodeInt(is, 2);
+            rhl = is.read();
             rpi = 0;
             isResp = (udh != null && (udh[1] & 0xFF) == 0x71) ||
-                    (chl == 0x0a || chl == 0x0E || chl == 0x12);
+                    (rhl == 0x0a || rhl == 0x0E || rhl == 0x12);
         }
 
-        if (!isResp && chl != 0x15 && chl != 0x11 && chl != 0x0D)
-            throw new Exception(String.format("Invalid OTA packet length: %d", chl));
-        else if (isResp && (transportType == Transport.TransportType.SMS) && chl != 0x0a && chl != 0x0E && chl != 0x12)
-            throw new Exception(String.format("Invalid SMS OTA response packet length: %d", chl));
+        if (!isResp && rhl != 0x15 && rhl != 0x11 && rhl != 0x0D)
+            throw new Exception(String.format("Invalid OTA packet length: %d", rhl));
+        else if (isResp && (transportType == Transport.TransportType.SMS) && rhl != 0x0a && rhl != 0x0E && rhl != 0x12)
+            throw new Exception(String.format("Invalid SMS OTA response packet length: %d", rhl));
 
         int spi1;
         int spi2;
@@ -156,17 +152,41 @@ public class Ota {
         int kid_keynum = -1;
         byte[] kic = null;
         byte[] kid = null;
-        if ((kic_byte & 0x0F) != DES_NONE &&
+        if (isResp) {
+            // Implicit security
+            Utils.Pair<KeyComponent,KeyComponent> kp = sd.findFirstSCP80KeyComponents();
+            if (kp != null) {
+                if (kp.k != null) {
+                    kic_byte = kp.k.to102_225_keybyte();
+                    kic = kp.k.byteValue();
+                    kic_byte = kp.k.to102_225_keybyte();
+                }
+                if (kp.l != null) {
+                    kid_byte = kp.l.to102_225_keybyte();
+                    kid = kp.l.byteValue();
+                    kid_byte = kp.l.to102_225_keybyte();
+                }
+            } else
+                spi1 = 0;
+
+            int crypto_mask = kic != null ? (0x1 << 2) : 0;
+            spi1 = (crypto_mask | (kid != null ? 0x02 | (spi1 & ~0x03) : spi1));
+
+            spi1 |=  kid != null ? 0x2 : kic != null ? 0x01 : 0;
+        }
+
+        if (kic == null &&
+                (kic_byte & 0x0F) != DES_NONE &&
                 spiHasEncryption(spi1)) {
             kic_keynum = (kic_byte & 0xFF) >> 4;
             int typeNibble = (kic_byte & 0xF);
             Utils.Pair<Integer, byte[]> r = Key.findKeyValue(sd, KeySet.Type.SCP80, kic_keynum, typeNibble, Key
                     .KIC_KEY_IDENTIFIER);
             kic = r.l;
-
         }
 
-        if ((kid_byte & 0x0F) != DES_NONE &&
+        if (kid == null &&
+                (kid_byte & 0x0F) != DES_NONE &&
                 spiHasCryptoCrc(spi1)) {
             kid_keynum = (kid_byte & 0xFF) >> 4;
             int typeNibble = (kid_byte & 0xF);
@@ -192,12 +212,16 @@ public class Ota {
         int pad = is.read();
 
         byte[] crc;
-        ByteArrayOutputStream osPkg = new ByteArrayOutputStream();
+        byte[] statusCode = null;
         if (isResp) {
-            int crc_len = chl - 3 - 5 - 1 - 1;
-            if (crc_len > 0)
-                is.skip(crc_len); // Skip crc
-            crc = null;
+            int crc_len = rhl - 3 - 5 - 1 - 1;
+            statusCode = new byte[1];
+            is.read(statusCode);
+            if (crc_len > 0) {
+                crc = new byte[crc_len];
+                is.read(crc);
+            } else
+                crc = null;
         } else {
             // Check stuff.
             boolean crcCrypto = ((spi1 >> 1) & 0x01) != 0;
@@ -207,35 +231,43 @@ public class Ota {
                 is.read(crc);
             } else
                 crc = new byte[0];
+        }
 
-            if ((spi1 & 0x03) != 0) {
-                // Verify crc
-                if (transportType != Transport.TransportType.SMS) {
-                    osPkg.write(rpi);
-                    Utils.BER.appendTLVlen(osPkg, cpl);
-                    Utils.BER.appendTLVlen(osPkg, chl);
-                } else {
-                    Utils.appendEncodedInteger(osPkg, cpl, 2);
-                    osPkg.write(chl);
-                }
+        ByteArrayOutputStream osPkg = new ByteArrayOutputStream();
+        if ((spi1 & 0x03) != 0) {
+            // For verify crc
+            if (transportType != Transport.TransportType.SMS) {
+                osPkg.write(rpi);
+                Utils.BER.appendTLVlen(osPkg, rpl);
+                Utils.BER.appendTLVlen(osPkg, rhl);
+            } else {
+                // According to 3GPP TS 31 115 (Sec 4.4/4.5), we add 02 71 00 before rpl
+                osPkg.write(new byte[] {0x02, 0x71, 0x00});
+                Utils.appendEncodedInteger(osPkg, rpl, 2);
+                osPkg.write(rhl);
+            }
+
+            if (!isResp)
                 osPkg.write(new byte[]{
                         (byte) spi1,
                         (byte) spi2,
                         (byte) kic_byte,
                         (byte) kid_byte
                 });
-                osPkg.write(TAR);
-
-
-            }
+            osPkg.write(TAR);
         }
-        byte[] plainData = Utils.getBytes(is);
-        // Get data after counter and CRC removal.
 
+        // Get data after counter, padding, status code and CC removal.
+        byte[] plainData = Utils.getBytes(is);
         if (osPkg.size() > 0) { // We need to check CRC
-            byte[] xCrc = Checksum.get(spi1, kid_byte, kid, osPkg.toByteArray(), counterBytes, pad, plainData);
+            byte[] cheader = osPkg.toByteArray();
+            byte[] xCrc = Checksum.get(spi1, kid_byte, kid,
+                    cheader,
+                    counterBytes, pad,
+                    statusCode != null ? statusCode[0] : null,
+                    plainData);
             if (!Arrays.equals(xCrc, crc))
-                throw new Exception("CRC mismatch ins OTA packet");
+                throw new Exception("CRC mismatch in OTA packet");
         }
 
         // Remove padding
@@ -243,7 +275,9 @@ public class Ota {
             plainData = Arrays.copyOf(plainData, plainData.length - pad);
 
         Params otaParams = new Params(spi1, spi2, kic_keynum, kid_keynum, TAR, counterBytes, p, sd);
-        return new Utils.Pair<byte[], Params>(plainData, otaParams);
+        if (statusCode != null)
+            otaParams.responseStatusCode = statusCode[0];
+        return new Utils.Triple<>(plainData, otaParams,eis);
     }
 
     /**
@@ -346,35 +380,14 @@ public class Ota {
         boolean hasCrc = spiHasCryptoCrc(spi1);
 
         KeyComponent kic = null, kid = null;
-
         // Look for kic and kid.
-        List<KeySet> keySetList = securityDomain.getKeysets();
-        KeySet ks = null;
-        for (KeySet k : keySetList)
-            if (k.keysetType() == KeySet.Type.SCP80)
-                try {
-                    ks = k;
-                    boolean gotKic = !hasEnc; // If we have no enc, then we don't need to look for Kic
-                    boolean gotKid = !hasCrc; // If no CRC, then no ned for KiD
-                    // Look for suitable kic and kid components
-                    for (Key key : k.getKeys()) {
-                        if (!gotKic && key.getIndex() == Key.KIC_KEY_IDENTIFIER) {
-                            kic = key.findSuitableKeycomponent(suitableTS102225Types);
-                            gotKic = kic != null;
-                        } else if (!gotKid && key.getIndex() == Key.KID_KEY_IDENTIFIER) {
-                            kid = key.findSuitableKeycomponent(suitableTS102225Types);
-                            gotKid = kid != null;
-                        }
-                        if (gotKic && gotKid)
-                            break;
-                    }
-                    if (gotKic && gotKid)
-                        break;
-                } catch (Exception ex) {
-                }
-        if (ks == null)
-            throw new Exception("Invalid: No matching key set in security domain");
-
+        try {
+            Utils.Pair<KeyComponent,KeyComponent> kp = securityDomain.findFirstSCP80KeyComponents();
+            kic = hasEnc ? kp.k : null;
+            kid = hasCrc ? kp.l : null;
+        } catch (Exception ex) {
+            throw new Exception("Invalid: No matching SCP80 key set in security domain");
+        }
         return createSCP80Pkg(session, in, cpi, kic, kid, spi1, spi2, TAR, counter);
     }
 
@@ -509,7 +522,7 @@ public class Ota {
         osPkg.write(TAR);
 
     /* crc on cpl + chl + spi + KIc + KID + TAR + CNTR + */
-        byte[] crc = Checksum.get(spi1, kid_byte, kid, osPkg.toByteArray(), counter, pcntr, in);
+        byte[] crc = Checksum.get(spi1, kid_byte, kid, osPkg.toByteArray(), counter, pcntr, null, in);
         // Utils.lg.info(String.format("CRC: [%s]", Utils.b2H(crc)) );
         if (!enc) {
             osPkg.write(counter);
@@ -550,12 +563,12 @@ public class Ota {
                                  final String msisdn, final byte[] udh,
                                  EntityManager em) throws Exception {
 
-        final Utils.Pair<byte[], Params> r = unpackSCP80(input, transportType, msisdn, udh, em);
+        final Utils.Triple<byte[], Params,Eis> r = unpackSCP80(input, transportType, msisdn, udh, em);
         final Params p = r.l;
         final String TAR = p.getTARasString();
 
 
-        Eis eis = Eis.findByMsisdn(em, msisdn);
+        Eis eis = r.m; // Eis.findByMsisdn(em, msisdn);
         Session session = new Session(em, eis);
 
         // Count MO pkt
@@ -731,8 +744,9 @@ public class Ota {
             SmSrTransaction.Status tstatus = bt.getStatus();
             TransactionType tobj = bt.getTransObject();
             byte[] output = resp.getData();
-            Utils.Triple<Boolean, Boolean, String> res = Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
-            boolean success = res.k;
+            boolean successPor = otaParams.responseStatusCode == 0;
+            Utils.Quad<Boolean, Boolean, String,Ota.ResponseHandler.ETSI102226APDUResponses> res = Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
+            boolean success = successPor && res.k;
             boolean retry = res.l;
             String formattedResult = res.m;
             boolean continueProcessing;
@@ -745,6 +759,7 @@ public class Ota {
             // Run the updates, if we should continue processing
             if (continueProcessing)
                 try {
+                    tobj.setResponses(res.o);
                     tobj.handleResponse(em, bt.getId(), success ? TransactionType.ResponseType
                                     .SUCCESS :
                                     TransactionType.ResponseType.ERROR, reqId,
@@ -931,7 +946,9 @@ public class Ota {
         // Checksum stuff.
 
         public static byte[] get(int spi1, int kid_byte, byte[] kid, byte[] cheader, byte[] counter,
-                                 int pcntr, byte[] data) throws Exception {
+                                 int pcntr,
+                                 Byte statusCode,
+                                 byte[] data) throws Exception {
 
             if ((spi1 & 0x03) == 0)
                 return new byte[0]; // No checksum requested
@@ -942,7 +959,9 @@ public class Ota {
             os.write(cheader);
 
             os.write(counter);
-            os.write(pcntr);
+            os.write((byte)pcntr);
+            if (statusCode != null)
+                os.write(statusCode);
             os.write(data);
 
             // Utils.lg.info(String.format("HDR: %s", Utils.b2H(os.toByteArray())));
@@ -957,13 +976,15 @@ public class Ota {
                     Crypt.AES_CBC)
                 throw new Exception(String.format("Unsupported CC type %d!", mode));
 
-            // Padd to 8 bytes
+            /*
+            // Pad to 8 bytes
             int len = os.size();
             for (; len % 8 != 0; len++)
                 os.write(0);
-            byte[] res = CC(os.toByteArray(), kid, mode);
 
-            return res;
+             */
+
+            return CC(os.toByteArray(), kid, mode);
         }
 
         private static long CRC32AddTo(long CRC, int byteval) {
@@ -1008,8 +1029,11 @@ public class Ota {
          */
         private static byte[] CC(byte[] in, byte[] key, int mode) throws Exception {
 
-            if (in.length % 8 != 0)
+
+            if (mode != Crypt.AES_CBC && in.length % 8 != 0)
                 throw new Exception("Invalid input size. Must be a multiple of 8 bytes");
+
+
             if (key.length % 8 != 0)
                 throw new Exception("Invalid key size. Must be a multiple of 8 bytes");
 
@@ -1062,7 +1086,7 @@ public class Ota {
         public boolean forcePush = false;
         public boolean no034bPacking = false; //!< This is used when sending SMS.
         private byte[] TAR; //!< The TAR. For informational purposes only! If SD is set or profile is set, we use that
-
+        public short responseStatusCode;
 
         public Params(int spi1, int spi2, int kic, int kid, byte[] tar, byte[] counter, ProfileInfo p, SecurityDomain
                 sd) {
@@ -1244,9 +1268,13 @@ public class Ota {
                         data = new byte[len];
                         input.read(data);
                         int tag2 = data[0];
-                        if (tag2 == Number_of_Executed_C_APDUS_Tag)
+                        if (tag2 == Number_of_Executed_C_APDUS_Tag) {
+                            int numApdus = data[2];
                             // Skip 3 elements as per table 5.11
                             data = Arrays.copyOfRange(data, 3, data.length - 3);
+                            Utils.lg.info(String.format("Received response, %d c-apdus executed, data: %s",
+                                    numApdus, Utils.HEX.b2H(data)));
+                        }
                     }
                     r = new ETSI102226APDUResponses();
 
@@ -1314,7 +1342,7 @@ public class Ota {
                         r.add(data[0]); // Bad format...
                     else if (tag == Immediate_Action_Response_Tag)
                         r.addImmediateResponse(data);
-                    else
+                    else if (tag != Number_of_Executed_C_APDUS_Tag)
                         r.add(tag, data); // Generic response, e.g. for a SCP03t command
                 }
 
@@ -1367,19 +1395,20 @@ public class Ota {
              * @return {success,retryFlag,FormattedResp}
              * @brief parse response, tell us whether it was a success response or not. Might be over-ridden by sub-classes
              */
-            public static Utils.Triple<Boolean, Boolean, String> examineResponse(byte[] resp) {
+            public static Utils.Quad<Boolean, Boolean, String,Ota.ResponseHandler.ETSI102226APDUResponses> examineResponse(byte[] resp) {
                 boolean isSuccess = true, retry = false;
                 String s = "";
+                Ota.ResponseHandler.ETSI102226APDUResponses r = null;
                 try {
 
-                    Ota.ResponseHandler.ETSI102226APDUResponses r = parse(resp);
+                    r = parse(resp);
                     Utils.Triple<Boolean, Boolean, String> res = r.process();
                     isSuccess = res.k; // Whether success
                     retry = res.l;
                     s = res.m;
                 } catch (Exception ex) {
                 }
-                return new Utils.Triple<>(isSuccess, retry, s);
+                return new Utils.Quad<>(isSuccess, retry, s,r);
             }
 
             public Utils.Triple<Boolean, Boolean, String> process(

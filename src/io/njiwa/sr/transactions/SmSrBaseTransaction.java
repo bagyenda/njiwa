@@ -34,11 +34,13 @@ public class SmSrBaseTransaction extends BaseTransactionType {
     private BipCatTP bipCatTP;
     private RamHttp ramHttp;
 
+
     public void setTransports(Sms sms, BipCatTP bipCatTP, RamHttp http) {
         this.sms = sms;
         this.bipCatTP = bipCatTP;
         this.ramHttp = http;
     }
+
 
     private static final String TAG = "TRLOG";
 

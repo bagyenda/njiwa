@@ -21,6 +21,7 @@ import io.njiwa.sr.model.AuditTrail;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.model.ProfileInfo;
 import io.njiwa.sr.model.SmSrTransaction;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.ws.CommonImpl;
 
 import javax.persistence.EntityManager;
@@ -81,45 +82,68 @@ public class AuditEISTransaction extends SmSrBaseTransaction {
             response) {
         SmSrTransaction t = em.find(SmSrTransaction.class, tid);
         Eis eis = t.eisEntry(em);
-        ByteArrayInputStream xin = new ByteArrayInputStream(response);
+        boolean gotResult;
+
+        // Get first rapdu;
+        Ota.ResponseHandler.ETSI102226APDUResponses r = getResponses();
+        byte[] xdata = new byte[0];
+        int sw1 = 0;
+        if (r != null) {
+            for (Ota.ResponseHandler.ETSI102226APDUResponses.Response response1 : r.responses)
+                if (response1.type == Ota.ResponseHandler.ETSI102226APDUResponses.Response.ResponseType.RAPDU) {
+                    xdata  = response1.data;
+                    sw1 = response1.sw1;
+                    break;
+                }
+        }
+        try {
+            if (!SDCommand.APDU.isSuccessCode(sw1))
+                throw new Exception(String.format("Error: %s", Utils.HEX.b2H(response)));
+            gotResult = true;
+        } catch (Exception ex) {
+            gotResult = false;
+        }
+        int numApplications = 0;
+        long freeNonvolatileMem = 0;
+        long freeVolatileMem = 0;
+        ByteArrayInputStream xin = new ByteArrayInputStream(xdata);
+        // Must contain a DGI with code FF 21
+        try {
+            Utils.Pair<Integer, byte[]> xres = Utils.DGI.decode(xin);
+            if (xres.k != 0xFF21)
+                Utils.lg.warning(String.format("Invalid DGI tag in AuditEIS response, got [0x%x]", xres.k));
+            xin = new ByteArrayInputStream(xres.l);
+        } catch (Exception ex) {
+
+        }
         while (xin.available() > 0)
             try {
 
                 Utils.Pair<InputStream, Integer> xres = Utils.BER.decodeTLV(xin);
-                // TAG must be R_APDU
                 byte[] resp = Utils.getBytes(xres.k);
-                // Get response code
-                int sw1 = resp[resp.length - 2];
-                if (!SDCommand.APDU.isSuccessCode(sw1))
-                    throw new Exception(String.format("Error: %s", Utils.HEX.b2H(response)));
-                // Parse the data
-                InputStream in = new ByteArrayInputStream(resp);
-                Utils.Pair<InputStream, Integer> xres2 = Utils.BER.decodeTLV(in);
-                if (xres2.l != 0xE3)
-                    throw new Exception(String.format("Unexpected result tag [%02x], expected E3", xres.k));
-                // Look at the data, based on table 28 of SGP and Sec 8.2.1.7.2 of ETSI TS 102 226
-                in = xres2.k;
-                xres2 = Utils.BER.decodeTLV(in);
-                // XX for now ignore card info
-                if (xres2.l == 0x4F) {
-                    byte[] aid = Utils.getBytes(xres2.k);
-                    // Read LCS and Attr.
-                    xres2 = Utils.BER.decodeTLV(in);
-                    byte lcs = Utils.getBytes(xres2.k)[0];
-                    xres2 = Utils.BER.decodeTLV(in);
-                    byte attr = Utils.getBytes(xres2.k)[0];
-
-                    // Find Profile, update it
-                    ProfileInfo p = eis.findProfileByAID(Utils.HEX.b2H(aid));
-                    p.setState(ProfileInfo.State.fromCode(lcs));
-                    p.setFallbackAttr((attr & 0x01) != 0);
-                    eis.setLastAuditDate(Calendar.getInstance().getTime());
+                int tag = xres.l & 0xFF;
+                // Look at the data,  Sec 8.2.1.7.2 of ETSI TS 102 226
+                switch (tag) {
+                    case 0x81:
+                        numApplications = resp[0];
+                        break;
+                    case 0x82:
+                        freeNonvolatileMem = Utils.BER.decodeInt(resp,resp.length);
+                        break;
+                    case 0x83:
+                        freeVolatileMem = Utils.BER.decodeInt(resp,resp.length);
+                    default:
+                        break;
                 }
             } catch (Exception ex) {
                 Utils.lg.severe(String.format("Failed to process response to auditeis [tr:%s]: %s",
                         t,
                         ex));
             }
+
+        Utils.lg.info(String.format("auditeis [tr:%s, success: %s]: apps: %d, free non volatile ram: %d, free volatile ram: %d",
+                t, gotResult,
+                numApplications,freeNonvolatileMem,freeVolatileMem));
         if (!hasMore()) {
             RpaEntity requestor = em.find(RpaEntity.class, this.requestor);
             if (status == null)

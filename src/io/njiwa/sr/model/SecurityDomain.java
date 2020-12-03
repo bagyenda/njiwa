@@ -14,6 +14,8 @@ package io.njiwa.sr.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.njiwa.common.Utils;
+import io.njiwa.common.model.Key;
+import io.njiwa.common.model.KeyComponent;
 import io.njiwa.common.model.KeySet;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
@@ -89,12 +91,12 @@ public class SecurityDomain {
         try {
             String xtar = Utils.HEX.b2H(TAR);
             for (SecurityDomain s : eis.getSdList()) {
-                if (Utils.tarFromAid(s.getAid()).equalsIgnoreCase(xtar))
-                    return s;
-                // Now check the rest of the TARs in list
                 for (String t : s.getTARsAsList())
                     if (t.equalsIgnoreCase(xtar))
                         return s;
+                    // Try by AID
+                if (Utils.tarFromAid(s.getAid()).equalsIgnoreCase(xtar))
+                    return s;
             }
         } catch (Exception ex) {
         }
@@ -192,6 +194,22 @@ public class SecurityDomain {
         String xaid = getAid();
         String xrole = getRole().toString();
         return String.format("%s [%s]", xaid != null ? xaid : "n/a", xrole);
+    }
+
+    public  Utils.Pair<KeyComponent,KeyComponent> findFirstSCP80KeyComponents() {
+        for (KeySet ks : getKeysets())
+            if (ks.getType() == KeySet.Type.SCP80) {
+                KeyComponent kic = null, kid = null;
+                // Check for component with idx 1 (KIC) and one with idx 2 (KID)
+                for (Key key : ks.getKeys()) {
+                    if (key.getIndex() == Key.KIC_KEY_IDENTIFIER)
+                        kic = key.findSuitableKeycomponent(KeyComponent.suitableTS102225Types);
+                    else if (key.getIndex() == Key.KID_KEY_IDENTIFIER)
+                        kid = key.findSuitableKeycomponent(KeyComponent.suitableTS102225Types);
+                    if (kic != null && kid != null) return new Utils.Pair<>(kic, kid);
+                }
+            }
+        return null;
     }
 
     public enum Role {
