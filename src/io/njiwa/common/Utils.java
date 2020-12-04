@@ -1023,9 +1023,7 @@ public class Utils {
         public static Pair<Integer, byte[]> decode(InputStream in) throws Exception {
             int firstByte = in.read() & 0xFF;
             int secondByte = in.read();
-            int n1 = ((firstByte << 8)) ;
-            int n2 = secondByte & 0xff;
-            int tag = n1 | n2;
+            int tag = ((firstByte << 8)) | (secondByte & 0xff);
 
             // Now look at length
             long len = in.read() & 0xFF;

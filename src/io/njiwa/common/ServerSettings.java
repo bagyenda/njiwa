@@ -90,6 +90,7 @@ public class ServerSettings {
     private static final String RAM_MAX_SEND_REQUESTS = "ram_max_send_requests";
     private static final String RAM_IDLE_TIMEOUT = "ram_idle_timeout";
     private static final String RAM_USE_DEFAULT_CONFIG = "ram_use_default_config";
+    private static final String RAM_MIN_APDUS_CONFIG = "ram_min_apdus"; // Minimum number of capdus to force https
     private static final String RAM_POLLING_URI = "ram_polling_uri";
     private static final String MAX_EVENTS_HOURS = "max_events_hours";
 
@@ -210,7 +211,7 @@ public class ServerSettings {
 
             put(RAMHTTP_NUM_RETRIES, new PositiveIntegerValuesValidator(10)); // Default is no retries
 
-            put(RAMHTTP_ADMIN_PORT, new PositiveIntegerValuesValidator(9443));
+            put(RAMHTTP_ADMIN_PORT, new PositiveIntegerValuesValidator(5443));
             put(RAM_ADMIN_BACKLOG, new PositiveIntegerValuesValidator(10));
             put(RAM_ADMIN_HTTP_KEEP_ALIVE_TIMEOUT, new PositiveIntegerValuesValidator(120)); // HTTP Connection
             // considered dead after 120 seconds.
@@ -235,6 +236,7 @@ public class ServerSettings {
             put(SIGNED_SM_DP_DATA, new ByteArrayValidator("", true));
             put(SIGNED_SM_SR_DATA, new ByteArrayValidator("", true));
             put(WS_PREFIX, new BaseValidator(""));
+            put(RAM_MIN_APDUS_CONFIG, new PositiveIntegerValuesValidator(2));
         }
     };
 
@@ -253,6 +255,9 @@ public class ServerSettings {
         return (String) propertyValues.get(RAM_POLLING_URI);
     }
 
+    public static int getRamMinApdus() {
+        return (Integer)propertyValues.get(RAM_MIN_APDUS_CONFIG);
+    }
     public static boolean getRamUseDefaultConfig() {
         return (Boolean) propertyValues.get(RAM_USE_DEFAULT_CONFIG);
     }
@@ -872,6 +877,7 @@ public class ServerSettings {
 
         public static final int DEFAULT_VALIDITY = 3600 * 24;
         public static final boolean useIndefiniteCodingInExpandedFormat = false; // SGP.11 v4.1 appendix H spec say no...
+        static final int DEFAULT_WAIT_FOR_PKT_DISPATCH = 300;
 
         public static String jcaProvider = BouncyCastleProvider.PROVIDER_NAME;
 

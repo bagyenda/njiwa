@@ -38,7 +38,6 @@ import java.util.concurrent.TimeUnit;
 @Stateless
 public class GenericPeriodicProcessor<T> {
 
-    private static final int DEFAULT_EXPIRE = 60;
     @Inject
     protected PersistenceUtility persistenceObj;
     ProcessQueue pq; //!< The processing queue
@@ -109,7 +108,7 @@ public class GenericPeriodicProcessor<T> {
         String key = String.format("%s_%s", redis_prefix, o);
 
         try {
-            String res = conn.set(key, "1", "NX", "EX", DEFAULT_EXPIRE);
+            String res = conn.set(key, "1", "NX", "EX", ServerSettings.Constants.DEFAULT_WAIT_FOR_PKT_DISPATCH);
             if (res != null && res.equalsIgnoreCase("ok"))
                 return true;
         } catch (redis.clients.jedis.exceptions.JedisConnectionException a) {

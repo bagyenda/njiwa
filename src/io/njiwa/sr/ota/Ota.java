@@ -68,6 +68,7 @@ public class Ota {
     public static final short Number_of_Executed_C_APDUS_Tag = 0x80;
     public static final short Immediate_Action_Response_Tag = 0x81;
     public static final short Bad_Format_Tag = 0x90;
+    public static final byte[] SMS_STATIC_RPH = {0x02, 0x71, 0x00};
 
     static {
         // Initialise the default TAR
@@ -242,7 +243,7 @@ public class Ota {
                 Utils.BER.appendTLVlen(osPkg, rhl);
             } else {
                 // According to 3GPP TS 31 115 (Sec 4.4/4.5), we add 02 71 00 before rpl
-                osPkg.write(new byte[] {0x02, 0x71, 0x00});
+                osPkg.write(SMS_STATIC_RPH);
                 Utils.appendEncodedInteger(osPkg, rpl, 2);
                 osPkg.write(rhl);
             }
@@ -370,8 +371,10 @@ public class Ota {
      * @throws Exception
      * @brief Create the GSM 03.48 OTA packet, given its parameters
      */
-    public static byte[] createSCP80Pkg(Session session, SecurityDomain securityDomain, byte[] TAR, byte[] in, int cpi, Long
-            counter) throws
+    public static byte[] createSCP80Pkg(Session session, SecurityDomain securityDomain,
+                                        byte[] TAR, byte[] in, int cpi,
+                                        boolean porOnError,
+                                        Long counter) throws
             Exception {
 
         int spi1 = ServerSettings.getDefault_ota_spi1();
@@ -379,6 +382,11 @@ public class Ota {
         boolean hasEnc = spiHasEncryption(spi1);
         boolean hasCrc = spiHasCryptoCrc(spi1);
 
+        // If Por On error only, remove por.
+        if (porOnError & (spi2 & 0x03) != 0) {
+            spi2 &= ~0x3;
+            spi2  |= 0x02;
+        }
         KeyComponent kic = null, kid = null;
         // Look for kic and kid.
         try {
@@ -630,13 +638,17 @@ public class Ota {
         return xos.toByteArray();
     }
 
+    public interface HasEnoughOtaBuffer {
+        boolean hasEnoughBuffer(long pktSize);
+    }
+
     /**
      * @param otaParams the OTA parameters
      * @return the bytes to be sent, and the last index in the APDU list
      * @throws Exception
      * @brief Construct a package to be wrapped using 03.48
      */
-    public static Utils.Pair<byte[], Integer> mkOTAPkg(Params otaParams, List<byte[]> l, int startIndex, long maxSize)
+    public static Utils.Pair<byte[], Integer> mkOTAPkg(Params otaParams, List<byte[]> l, int startIndex, HasEnoughOtaBuffer enoughOtaBuffer)
             throws Exception {
 
 
@@ -651,7 +663,7 @@ public class Ota {
 
 
         ScriptChaining chainingType = ScriptChaining.fromOTAParams(startIndex, l.size());
-        final byte[] sdata = chainingType.toBytes(); // Put script chaining data in first
+        final byte[] sdata = otaParams.allowChaining ?  chainingType.toBytes() : new byte[0]; // Put script chaining data in first
         int cursize = sdata.length + (ServerSettings.Constants.useIndefiniteCodingInExpandedFormat ? 2 : 1 + 4); // Assume that definite coding
         // has a tag+length of 5, followed by chaining if any
 
@@ -665,7 +677,7 @@ public class Ota {
         int i = startIndex;
         do {
             byte[] data = l.get(i); // At this point the APDUs should already be split.
-            if (cursize + data.length >= maxSize)
+            if ( !enoughOtaBuffer.hasEnoughBuffer( cursize + data.length))
                 break;
             odata.write(data);
             cursize += data.length;
@@ -693,7 +705,6 @@ public class Ota {
         }
 
         otaParams.allowChaining = false; // Prevent chaining. Right?
-
 
         return new Utils.Pair<>(xos.toByteArray(), i);
     }
@@ -785,11 +796,12 @@ public class Ota {
                     bt.setSimResponse("");
             }
 
-            em.persist(bt); // Save it
-            em.flush(); // Force it out
+           // em.persist(bt); // Save it
+            // em.flush(); // Force it out
             if (new_status == SmSrTransaction.Status.Completed ||
                     new_status == SmSrTransaction.Status.Error)
-                SmSrTransactionRequestId.deleteTransactionRequestIds(em, bt.getId());
+                bt.deleteTransactionRequestIds();
+                // SmSrTransactionRequestId.deleteTransactionRequestIds(em, bt.getId());
 
             if (continueProcessing && success) {
                 SmSrTransaction tnext = bt.findNextAvailableTransaction(em);
@@ -1082,11 +1094,12 @@ public class Ota {
         public Eis eis = null; //!< The EIS entry
         public Long rfmCounter = null; //!< If already bumped, otherwise NULL
         public Long receivedRfmCounter = null; //!< When a MO package is received, this is the parsed RFM counter.
-        public boolean allowChaining = true; //!< No chaining by default. So that we MUST explicitly have it requested for the RFM application
+        public boolean allowChaining = false; //!< No script chaining by default. So that we MUST explicitly have it requested for the RFM application
         public boolean forcePush = false;
         public boolean no034bPacking = false; //!< This is used when sending SMS.
         private byte[] TAR; //!< The TAR. For informational purposes only! If SD is set or profile is set, we use that
         public short responseStatusCode;
+        public boolean porOnError = false;
 
         public Params(int spi1, int spi2, int kic, int kid, byte[] tar, byte[] counter, ProfileInfo p, SecurityDomain
                 sd) {

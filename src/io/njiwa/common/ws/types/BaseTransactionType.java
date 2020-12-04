@@ -33,6 +33,7 @@ public class BaseTransactionType  extends TransactionType {
     public BaseResponseType.ExecutionStatus status = null; // The status code. If set, use it, else infer from
     // response data
 
+    public BaseTransactionType() {} // So things work fine...
     public RpaEntity.Type requestorType;
     public Date startDate = Calendar.getInstance().getTime(); // Set it to time of creation
 

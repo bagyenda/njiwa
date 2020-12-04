@@ -190,6 +190,8 @@ public class SmSrTransactionsPeriodicProcessor extends GenericPeriodicProcessor<
                 }
                 t.setStatus(next_status);
                 t.setLastrequestID(reqId);
+                t.setLastSend(new Date());
+                t.setNumberOfAttempts(t.getNumberOfAttempts() + 1);
                 Eis eis = t.eisEntry(em);
                 String msisdn = eis.activeMISDN();
                 t.setMsisdn(msisdn); // Set it. Right?

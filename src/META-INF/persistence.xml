@@ -65,6 +65,7 @@
             <property name="hibernate.id.new_generator_mappings" value="true"/>
             <property name="hibernate.cache.use_query_cache" value="false"/>
             <property name="hibernate.cache.use_second_level_cache" value="false"/>
+            <property name="javax.persistence.lock.timeout" value="600000"/>
             <!-- need this so we force usage of DB sequences -->
             <!-- apparently above makes user-defined factories easier -->
 

@@ -296,7 +296,10 @@ public class Sms extends Transport {
      */
     public boolean canUseSMS(List<byte[]> l) {
         try {
-            if (l.size() > MAX_APDUS_FOR_SMS)
+            int n = l.size();
+            if (n > MAX_APDUS_FOR_SMS ||
+             n >= ServerSettings.getRamMinApdus()
+            )
                 return false;
             int largest = Collections.max(l, new Comparator<byte[]>() {
                 @Override
@@ -528,6 +531,8 @@ public class Sms extends Transport {
         int n = Ota.smsCount(dlen);
         return n < ctx.maxMessageSize; // Message size is measured in SMS...
     }
+
+
 
     @Override
     public int unitsCount(int dlen) {

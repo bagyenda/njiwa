@@ -363,7 +363,9 @@ public class SmSrTransaction {
             String xdata = getTransactionData();
             Class cls = Class.forName(xcls);
             myObj = (TransactionType) (new ObjectMapper()).readValue(xdata, cls);
-        } catch (Exception ex) {}
+        } catch (Exception ex) {
+            String xs = ex.getMessage();
+        }
         return myObj;
     }
 
@@ -380,6 +382,7 @@ public class SmSrTransaction {
     }
 
     @PrePersist
+    @PreUpdate
     public void updateTransients() {
         if (myObj != null)
             try {
@@ -445,7 +448,8 @@ public class SmSrTransaction {
             // Look for euicc handover, and process
             Eis xeis = eisEntry(em);
             SmSrTransaction t = null;
-            if (xeis.verifyPendingEuiCCHandoverTransaction(em)) try {
+            if (xeis.verifyPendingEuiCCHandoverTransaction(em))
+                try {
                 // See if we have any pending
                 t = em.createQuery("from SmSrTransaction   WHERE  id <> :l AND status not in" +
                         " (:b1,:b2,:b3," +
@@ -471,7 +475,7 @@ public class SmSrTransaction {
                 // it out
                 t.markReadyToSend();
                 Utils.lg.info(String.format("Sending out euicc handover transaction [%s]", t));
-                em.flush();
+                // em.flush();
             } catch (Exception ex) {
 
             }
@@ -552,8 +556,20 @@ public class SmSrTransaction {
         setStatus(status);
         setNextSend(Utils.infiniteDate);
         setLastupdate(Calendar.getInstance().getTime());
-        SmSrTransactionRequestId.deleteTransactionRequestIds(em, getId());
+        deleteTransactionRequestIds();
+        // SmSrTransactionRequestId.deleteTransactionRequestIds(em, getId());
         em.flush();
+    }
+
+    public void deleteTransactionRequestIds()
+    {
+        setLastrequestID(null);
+        List<SmSrTransactionRequestId> l = getRequestIdList();
+        try {
+            while (l.size() > 0) l.remove(l.get(0));
+        } catch (Exception ex) {
+
+        }
     }
 
     public Date getLastupdate() {

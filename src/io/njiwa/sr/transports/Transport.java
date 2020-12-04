@@ -212,7 +212,9 @@ public abstract class Transport {
     /**
      * @brief Modify the TEXT to send, e.g. if it should become a PUSH message for BIP
       */
-    public byte[] messageToSend(EntityManager em, Context context, byte[] text) {
+    public byte[] messageToSend(EntityManager em, Context context,
+                                Ota.Params params,
+                                byte[] text) {
         return text;
     }
 
@@ -269,7 +271,7 @@ public abstract class Transport {
         // Try and make the package
         byte[] pkg;
 
-        text = sender.messageToSend(em, ctx, text); // Mogrify message
+        text = sender.messageToSend(em, ctx, otaParams, text); // Mogrify message
         int cpi = sender.getCPI(ctx);
         String msisdn = sim.activeMISDN();
         Utils.lg.info(String.format("+++Packet Dump [MSISDN=%s, TAR=%s, rfmApp=%s, CPI=%s]+++%s+++",
@@ -281,7 +283,9 @@ public abstract class Transport {
         if (otaParams.no034bPacking)
             pkg = text;
         else {
-                pkg = Ota.createSCP80Pkg(gwSession, otaParams.sd, otaParams.getTAR(), text, cpi, otaParams.rfmCounter);
+                pkg = Ota.createSCP80Pkg(gwSession, otaParams.sd, otaParams.getTAR(), text, cpi,
+                        otaParams.porOnError, // Might come from RamHTTP
+                        otaParams.rfmCounter);
 
 
             if (otaParams.rfmCounter == null)

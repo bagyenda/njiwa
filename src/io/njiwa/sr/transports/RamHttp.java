@@ -13,18 +13,17 @@
 package io.njiwa.sr.transports;
 
 import io.njiwa.common.PersistenceUtility;
+import io.njiwa.common.ServerSettings;
 import io.njiwa.common.StatsCollector;
 import io.njiwa.common.Utils;
 import io.njiwa.common.model.Key;
 import io.njiwa.common.model.KeyComponent;
 import io.njiwa.common.model.KeySet;
 import io.njiwa.common.model.TransactionType;
-import io.njiwa.common.ServerSettings;
 import io.njiwa.sr.Session;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.model.SecurityDomain;
 import io.njiwa.sr.model.SmSrTransaction;
-import io.njiwa.sr.model.SmSrTransactionRequestId;
 import io.njiwa.sr.ota.Ota;
 import org.bouncycastle.tls.*;
 import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto;
@@ -122,8 +121,10 @@ public class RamHttp extends Transport {
     Sms smsTransport; //!< SMS transport link: We need this to send admin commands using the simplified protocol.
     @Inject
     Instance<PersistenceUtility> poTasks; //!< Persistence util pool for database transactions
+
     @Resource
     private ManagedExecutorService runner; //!< This is the thread pool for running the TLS client connections
+
     private PskTlsAdminServer tlsAdminServer = new PskTlsAdminServer(); //!< This is the PSK TLS server
 
     public RamHttp() {
@@ -274,7 +275,8 @@ public class RamHttp extends Transport {
         if (!ttype.hasMore())
             return null;
 
-        Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, ttype.cAPDUs, ttype.index, DEFAULT_HTTP_BUFFER_LEN);
+        Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, ttype.cAPDUs, ttype.index,
+                (l) -> l<DEFAULT_HTTP_BUFFER_LEN);
         ttype.lastIndex = xres.l;
         byte[] body = xres.k;
         if (body == null)
@@ -397,7 +399,8 @@ public class RamHttp extends Transport {
         bt.setSimStatusCode(xstatus);
         bt.setSimResponse(xstatus);
 
-        SmSrTransactionRequestId.deleteTransactionRequestIds(em, bt.getId());
+        bt.deleteTransactionRequestIds();
+        // SmSrTransactionRequestId.deleteTransactionRequestIds(em, bt.getId());
     }
 
     /**
@@ -527,11 +530,16 @@ public class RamHttp extends Transport {
      * @brief Compute the message to send: Either a PUSH or the raw message.
      */
     @Override
-    public byte[] messageToSend(EntityManager em, Transport.Context context, byte[] text) {
+    public byte[] messageToSend(EntityManager em,
+                                Transport.Context context,
+                                Ota.Params params,
+                                byte[] text) {
         Context ctx = (Context) context;
         // If we are using push, return the push command
-        if (ctx.forcePush)
+        if (ctx.forcePush) {
+            params.porOnError = true;
             return ctx.pushCmd;
+        }
         return text; // Otherwise return the bare message, and let the send function deal with issues...
     }
 
@@ -787,7 +795,6 @@ public class RamHttp extends Transport {
             public HttpTlsServer(Socket socket) {
                 this.socket = socket;
             }
-
 
             /**
              * @brief Perform the client handshake, then process HTTP transactions as received

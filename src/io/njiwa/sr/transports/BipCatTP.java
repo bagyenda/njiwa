@@ -703,11 +703,15 @@ public class BipCatTP extends Transport {
      * XXX Should also return SPI!
      */
     @Override
-    public byte[] messageToSend(EntityManager em, Transport.Context context, byte[] text) {
+    public byte[] messageToSend(EntityManager em, Transport.Context context,
+                                Ota.Params params,
+                                byte[] text) {
         Context ctx = (Context) context;
         // CatTP.Connection connection = ctx.conn;
-        if (ctx.usingPush())
+        if (ctx.usingPush()) {
+            params.porOnError = true;
             return ctx.makePushCmd();
+        }
 
         return text;
     }

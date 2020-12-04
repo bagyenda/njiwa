@@ -55,7 +55,7 @@ public class SmSrBaseTransaction extends BaseTransactionType {
         Transport sender = sms;
         List<byte[]> capdus = tr.getTransObject().cAPDUs;
         int startIndex = tr.getTransObject().index;
-        boolean hasMore = tr.getMoreToFollow(); // XXX Should we not honour this flag here?
+        boolean hasMore =  tr.getMoreToFollow(); // XXX Should we not honour this flag here?
         boolean canUseSMS = sms.canUseSMS(capdus);
         // Determine transport from what it supports: For now simply try them one by one
         if (canUseSMS && !hasMore)
@@ -80,8 +80,10 @@ public class SmSrBaseTransaction extends BaseTransactionType {
         if (ctx == null)
             throw new Exception("No supported transport mechanism");
         // Make the package
-
-        Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, capdus, startIndex, ctx.maxMessageSize);
+        final Transport finalTransport = sender;
+        final Transport.Context finalCtx = ctx;
+        Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, capdus, startIndex,
+                (l) -> finalTransport.hasEnoughBuffer(finalCtx,(int)l));
         Session gwsession = new Session(em, eis);
         String reqId = otaParams.mkRequestID();
 
