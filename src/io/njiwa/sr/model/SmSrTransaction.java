@@ -558,7 +558,7 @@ public class SmSrTransaction {
         setLastupdate(Calendar.getInstance().getTime());
         deleteTransactionRequestIds();
         // SmSrTransactionRequestId.deleteTransactionRequestIds(em, getId());
-        em.flush();
+        // em.flush();
     }
 
     public void deleteTransactionRequestIds()

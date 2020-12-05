@@ -18,6 +18,8 @@ import io.njiwa.common.model.Certificate;
 import io.njiwa.common.model.KeySet;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.ServerSettings;
+import org.hibernate.annotations.DynamicInsert;
+import org.hibernate.annotations.DynamicUpdate;
 
 import javax.persistence.*;
 import javax.xml.bind.DatatypeConverter;
@@ -37,6 +39,8 @@ import java.util.*;
 }
 )
 @SequenceGenerator(name = "eis", sequenceName = "eis_seq")
+@DynamicUpdate
+@DynamicInsert
 public class Eis {
 
     public final static String ISDP_LOAD_FILE_AID = "A0000005591010FFFFFFFF8900000D00";

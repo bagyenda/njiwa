@@ -18,6 +18,7 @@ import javax.ejb.TransactionManagement;
 import javax.ejb.TransactionManagementType;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
+import javax.persistence.EntityTransaction;
 import javax.persistence.PersistenceUnit;
 import javax.transaction.UserTransaction;
 
@@ -64,20 +65,25 @@ public class PersistenceUtility {
         UserTransaction transaction = this.transaction;
         EntityManagerFactory factory = this.factory;
         boolean success = false;
+        EntityTransaction tx = null;
         try {
 
-            transaction.begin(); // Begin
+           transaction.begin(); // Begin
 
             em = factory.createEntityManager();
+            // tx = em.getTransaction();
+            // tx.begin();
             res = o.run(this, em);
             em.flush();
            // em.getEntityManagerFactory().getCache().evictAll();
-            em.clear();
-            em.close();
-            em = null;
+           // em.clear();
+           // em.close();
+           // em = null;
             transaction.commit(); // commit
+            // tx.commit();
             success = true;
         } catch (Exception ex) {
+            // if ( tx != null && tx.isActive() ) tx.rollback();
             Utils.lg.severe(String.format("doTransaction failed: %s", ex));
            // res = null;
             try {
@@ -89,7 +95,7 @@ public class PersistenceUtility {
             try {
                 o.cleanup(success); // Finally, cleanup
             } catch (Exception ex) {}
-            if (em != null)
+           if (em != null)
                 em.close();
         }
 

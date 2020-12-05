@@ -1,4 +1,4 @@
-version '0.7'
+version '0.8'
 
 apply plugin: 'war'
 sourceCompatibility = 1.8

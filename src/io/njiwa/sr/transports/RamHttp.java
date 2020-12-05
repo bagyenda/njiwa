@@ -348,7 +348,7 @@ public class RamHttp extends Transport {
             resp = new Utils.Http.Response(Response.Status.OK, hdrs,
                     ctype, body, closeConn);
 
-            em.flush(); // Force the changes out. Right?
+         //   em.flush(); // Force the changes out. Right?
         } catch (Exception ex) {
             resp = new Utils.Http.Response(Response.Status.NO_CONTENT, null, null, null, closeConn);
             Utils.lg.severe(String.format("RAMHTTP.admin.endpoint: Received request to fetch transaction [%s] but " +
@@ -430,7 +430,7 @@ public class RamHttp extends Transport {
 
                 processSingleResponse(em, bt, output, success, xstatus);
                 nextBt = success ? bt.findNextAvailableTransaction(em) : null;
-                em.flush(); // Right?
+              //  em.flush(); // Right?
             } else {
                 // Just a notification: handle it
                 Session session = new Session(em, sim);
@@ -864,7 +864,7 @@ public class RamHttp extends Transport {
                         // right??
                         euicc.setNumPendingRAMRequests(0); // Clear the number of pending requests. We got a connection.
 
-                        em.flush(); // Force changes out. Right?
+                       // em.flush(); // Force changes out. Right?
                         Utils.Http.Response response;
                         boolean closeConn = (reqs == maxReqs);
                         String xAdminFrom = req.headers.get("X-Admin-From");

@@ -374,7 +374,7 @@ public class ES2Impl {
                 SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
                 tr.setIsdp(xisdp); // Record it.
                 em.persist(tr);
-                em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
                 return tr;
             }
 
@@ -467,7 +467,7 @@ public class ES2Impl {
                         .getUser(context).getId());
                 SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
                 em.persist(tr);
-                em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+               // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
                 return tr;
             }
 
@@ -560,7 +560,7 @@ public class ES2Impl {
                         .getUser(context).getId());
                 SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
                 em.persist(tr);
-                em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+               // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
                 return tr;
             }
 
@@ -640,7 +640,7 @@ public class ES2Impl {
                         .getUser(context).getId());
                 SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
                 em.persist(tr);
-                em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
                 return tr;
             }
 
@@ -731,7 +731,7 @@ public class ES2Impl {
                         .getUser(context).getId());
                 SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
                 em.persist(tr);
-                em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
                 return tr;
             }
 

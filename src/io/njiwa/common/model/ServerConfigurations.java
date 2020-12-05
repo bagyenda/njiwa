@@ -71,7 +71,7 @@ public class ServerConfigurations {
                     .setParameter("k", key)
                     .getSingleResult();
             em.remove(v);
-            em.flush();
+          //  em.flush();
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }

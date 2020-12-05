@@ -421,7 +421,7 @@ public class Sms extends Transport {
                 DlrTracker.MessagePart m = new DlrTracker.MessagePart();
                 m.setPartNo(0);
                 l.add(m);
-                em.flush(); // Really?
+              //  em.flush(); // Really?
             }
             // Send the message
             if (vdev == null)
@@ -481,7 +481,7 @@ public class Sms extends Transport {
                     DlrTracker.MessagePart m = new DlrTracker.MessagePart();
                     m.setPartNo(i);
                     l.add(m);
-                    em.flush(); // Really?
+                  //  em.flush(); // Really?
                 }
                 byte[] xudh = udh.toByteArray();
 
@@ -798,12 +798,6 @@ public class Sms extends Transport {
                         // Find destination: Ignore short codes for now, all go to GW
                         boolean forgw = true; // to.equalsIgnoreCase(Properties.getVsmsc_number());
 
-                        //  if (!forgw)
-                        //      for (i = 0; i < Properties.getVsmscGwShortCodes().length; i++)
-                        //          if (Properties.getVsmscGwShortCodes()[i].equalsIgnoreCase(to)) {
-                        //              forgw = true;
-                        //              break;
-                        //         }
                         reply = Utils.urlEncode(sms);
                         out.write((reply + "\n").getBytes(StandardCharsets.UTF_8));
                         replySent = true;

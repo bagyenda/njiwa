@@ -273,6 +273,7 @@ public class SmDpTransaction {
     }
 
     @PrePersist
+    @PreUpdate
     public void updateTransients() {
         if (myObj != null)
             try {

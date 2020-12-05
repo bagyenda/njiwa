@@ -126,7 +126,7 @@ public class SmSrTransactionsPeriodicProcessor extends GenericPeriodicProcessor<
                     status != SmSrTransaction.Status.Sent) {
                 Utils.lg.info(String.format("Transaction [%d] is not active, skipping it", t.getId()));
                 t.setNextSend(Utils.infiniteDate);
-                em.flush();
+               // em.flush();
                 return null;
             }
             SmSrBaseTransaction transObject = (SmSrBaseTransaction) t.getTransObject();
@@ -155,7 +155,7 @@ public class SmSrTransactionsPeriodicProcessor extends GenericPeriodicProcessor<
             t.setNextSend(afterT);
             t.setRetries(retries + 1);
             t.setStatus(SmSrTransaction.Status.InProgress);
-            em.flush(); // Push out changes. Right??
+           // em.flush(); // Push out changes. Right??
 
             try {
                 transObject.setTransports(sms, bipCatTP, ramHttp); // Store them before we process

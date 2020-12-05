@@ -113,7 +113,7 @@ public class ES1Impl {
                 @Override
                 public Object run(PersistenceUtility po, EntityManager em) throws Exception {
                     em.persist(eisObj);
-                    em.flush();
+                 //   em.flush();
                     return true;
                 }
 

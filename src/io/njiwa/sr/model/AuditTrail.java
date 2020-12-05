@@ -50,7 +50,7 @@ public class AuditTrail {
     @Column(columnDefinition = "TEXT")
     private String requestorID;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String status;
     @Column(columnDefinition = "TEXT")
     private String isdpAID;

@@ -469,6 +469,7 @@ public class RpaEntity {
 
     // Fixup alias
     @PrePersist
+    @PreUpdate
     private void fixupAlias() {
         String x509Subject = getX509Subject();
         if (x509Subject == null)
