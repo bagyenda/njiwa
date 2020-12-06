@@ -1,14 +1,14 @@
 /*
  * Njiwa Open Source Embedded M2M UICC Remote Subscription Manager
- * 
- * 
+ *
+ *
  * Copyright (C) 2019 - , Digital Solutions Ltd. - http://www.dsmagic.com
  *
  * Njiwa Dev <dev@njiwa.io>
- * 
+ *
  * This program is free software, distributed under the terms of
  * the GNU General Public License.
- */ 
+ */
 
 package io.njiwa.sr.transports;
 
@@ -54,15 +54,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 
-
 /**
- * @brief  HTTP transport mechanism
+ * @brief HTTP transport mechanism
  * @details This module implements the HTTP Transport mechanism according to GPC Ammendment B. It consists
  * of the following sub-components:
  * - A TLS server module: This listens on a dedicated port for TCP/IP connections. It then performs a PSK-TLS handshake
  * and records the ID of the SIM card that has connected (assuming TLS handshake completes correctly)
  * - An HTTP server that runs on top of the TLS connection: This parses and composes HTTP messages. Each HTTP request is
- * routed to the relevant SCWS or RAM module, which then sends out the command packet. The HTTP response is then sent to the
+ * routed to the relevant SCWS or RAM module, which then sends out the command packet. The HTTP response is then sent
+ * to the
  * card. Likewise any response from the card is passed to the relevant module for processing
  * - A RAM module to compose RAM commands for sending via HTTP
  */
@@ -72,7 +72,8 @@ import java.util.Map;
 public class RamHttp extends Transport {
     public static final String PROP_APDU_FORMAT_PARAM = "ram-http-proprietary-apdu-format";
     public static final String RAM_HTTP_ADMIN_AGENT_TAR = "B20100"; //!< RAM Admin Agent TAR value
-    public static final String DISPATCHER_URI = ServerSettings.getRamPollingUri(); //!< The Dispatcher URL for HTTP over TLS
+    public static final String DISPATCHER_URI = ServerSettings.getRamPollingUri(); //!< The Dispatcher URL for HTTP
+    // over TLS
     public static final String DISPATCHER_RESULT_URI = "ramNext";
 
     public static final byte[] RAM_HTTP_ADMIN_AGENT_TAR_B;
@@ -83,15 +84,18 @@ public class RamHttp extends Transport {
     public static final short SECURITY_PARAMS_TAG = 0x85; //!<  Security params in PUSH SMS TAG
     public static final short RETRY_POLICY_PARAMS_TAG = 0x86; //!< Retry policy in PUSH SMS TAG
     public static final byte RETRY_FAILURE_REPORT_TAG = (byte) 0x87; //!< Retry failure report in PUSH SMS TAG
-    public static final String APPLICATION_VND_GPC = "application/vnd.globalplatform.card-content-mgt;version=1.0"; //!< RAM over HTTP content type
-    public static final String APPLICATION_VND_ETSI_SCP_COMMAND = "application/vnd.etsi.scp.command-data;version=1.0"; //!< ETSI TS TS 102 225 content type for APDU dispatch
+    public static final String APPLICATION_VND_GPC = "application/vnd.globalplatform.card-content-mgt;version=1.0";
+    //!< RAM over HTTP content type
+    public static final String APPLICATION_VND_ETSI_SCP_COMMAND =
+            "application/vnd.etsi.scp.command-data;version=1.0"; //!< ETSI TS TS 102 225 content type for APDU dispatch
     public static final short ADMIN_HTTP_POST_PARAMS_TAG = 0x89; //!< Post params in PUSH SMS TAG
     public static final short ADMIN_HOST_PARAM_TAG = 0x8A;
     public static final short AGENT_ID_PARAM_TAG = 0X8B; //!< Agent-ID in PUSH SMS TAG
     public static final short ADMIN_URI_PARAM_TAG = 0X8C; //!< Admin URI in PUSH SMS TAG
     public static final byte TIMER_VALUE_BER_TAG = (byte) 0xA5; //!< Timer value tag, from ETSI TS 101 220 Sec 7.2
     public static final int HTTP_HEADER_LEN = 286 + 10; //!< The approximate length of our HTTP message header
-    public static final int POR_FLAG = 0x00; //!< Whether to request Proof-of-receipt for Push messages. Set to 0x1 to get PoR
+    public static final int POR_FLAG = 0x00; //!< Whether to request Proof-of-receipt for Push messages. Set to 0x1
+    // to get PoR
     private static final int DEFAULT_HTTP_BUFFER_LEN = 1024; //!< The default HTTP buffer length, less headers.
     private static final short ADMIN_AGENT_FAILURE_REPORT_TAG = 0x88;
     private static final boolean ALLOW_RAM_COMMAND_CHAINING = false; //!< Whether to allow command chaining for RAM
@@ -103,8 +107,11 @@ public class RamHttp extends Transport {
     private static final KeyComponent.Type[] ALLOWED_KEYS_TYPES = new KeyComponent.Type[]{
             //    KeyComponent.Type.DES, KeyComponent.Type.TripleDES, KeyComponent.Type.TripleDES_CBC,
             //    KeyComponent.Type.DES_ECB, KeyComponent.Type.AES,
-            KeyComponent.Type.PSK_TLS
-    };
+            KeyComponent.Type.PSK_TLS};
+    public static final int[] SUPPORTED_CIPHERS = {CipherSuite.TLS_PSK_WITH_3DES_EDE_CBC_SHA, CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA,
+            CipherSuite.TLS_PSK_WITH_AES_128_GCM_SHA256, CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA256,
+            // CipherSuite.TLS_PSK_WITH_NULL_SHA,
+            CipherSuite.TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA, CipherSuite.TLS_RSA_PSK_WITH_AES_128_CBC_SHA};
     private static boolean ramHttpStarted = false;
 
     static {
@@ -164,8 +171,7 @@ public class RamHttp extends Transport {
             started = ramHttpStarted = true;
             String ipAddr;
             try {
-                ipAddr = InetAddress.getByAddress(ServerSettings
-                        .getBip_network_interface()).toString();
+                ipAddr = InetAddress.getByAddress(ServerSettings.getBip_network_interface()).toString();
             } catch (Exception ex) {
                 ipAddr = "127.0.0.1";
             }
@@ -208,19 +214,19 @@ public class RamHttp extends Transport {
         if (numOpenRequests > ServerSettings.getRamMaxSendRequests()) {
             ramHttpSupport = false;
         } else {
-            if (ramHttpSupport &&
-                    (!hasDataPlan ||
-                            ldiff > ServerSettings.getMax_bip_data_flag_cache_interval()))
+            if (ramHttpSupport && (!hasDataPlan || ldiff > ServerSettings.getMax_bip_data_flag_cache_interval()))
                 hasDataPlan = checkAndUpdateSimDataFlag(sim, TransportType.RAMHTTP);
         }
-        // Smart cad web server support is NOT predicated on data support. You can still send commands using the simplified protocol (via SMS)
+        // Smart cad web server support is NOT predicated on data support. You can still send commands using the
+        //simplified protocol (via SMS)
 
 
         return ramHttpSupport;
     }
 
     @Override
-    public boolean processTransMessageStatus(EntityManager em, SmSrTransaction bt, boolean success, boolean retry, byte[] data) {
+    public boolean processTransMessageStatus(EntityManager em, SmSrTransaction bt, boolean success, boolean retry,
+                                             byte[] data) {
         MessageStatus status = bt.getTransportMessageStatus();
         boolean psent = status == MessageStatus.HttpPushSent;
         if (psent) {
@@ -250,12 +256,12 @@ public class RamHttp extends Transport {
     /**
      * @param bt - The batch
      * @return - True if this is a RAM HTTP transaction
-     * @brief Returns true if this is a RAM-over-HTTP transaction. This is decided by the existance of the "RAM HTTP" parameter in the batch
+     * @brief Returns true if this is a RAM-over-HTTP transaction. This is decided by the existance of the "RAM HTTP"
+     * parameter in the batch
      * parameters
      */
     private boolean isRamHttpTrans(SmSrTransaction bt) {
-        if (bt == null)
-            return false;
+        if (bt == null) return false;
         TransportType t = bt.getLastTransportUsed();
         return t == TransportType.RAMHTTP;
     }
@@ -267,28 +273,23 @@ public class RamHttp extends Transport {
      * @throws Exception
      * @brief Make a request HTTP message structure out of the batch transaction parameters
      */
-    private Utils.Triple<byte[], Map<String, String>, String> makePkg(
-            final SmSrTransaction bt,
-            Ota.Params otaParams) throws Exception {
+    private Utils.Triple<byte[], Map<String, String>, String> makePkg(final SmSrTransaction bt, Ota.Params otaParams) throws Exception {
 
         TransactionType ttype = bt.getTransObject();
-        if (!ttype.hasMore())
-            return null;
+        if (!ttype.hasMore()) return null;
 
         Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, ttype.cAPDUs, ttype.index,
-                (l) -> l<DEFAULT_HTTP_BUFFER_LEN);
+                (l) -> l < DEFAULT_HTTP_BUFFER_LEN);
         ttype.lastIndex = xres.l;
         byte[] body = xres.k;
-        if (body == null)
-            return null;
+        if (body == null) return null;
         final String targetApp = otaParams.getHTTPargetApplication();
         Map<String, String> hdrs = new HashMap<String, String>() {
             {
-                put("X-Admin-Next-URI", String.format("/%s/%s",
-                        RamHttp.DISPATCHER_RESULT_URI, bt.getId())); // Put in response URI
+                put("X-Admin-Next-URI", String.format("/%s/%s", RamHttp.DISPATCHER_RESULT_URI, bt.getId())); // Put
+                // in response URI
                 // put("X-Admin-From", formatRamHTTPXAdminFrom(sim));
-                if (targetApp != null)
-                    put("X-Admin-Targeted-Application", String.format("//aid/%s", targetApp));
+                if (targetApp != null) put("X-Admin-Targeted-Application", String.format("//aid/%s", targetApp));
                 put("X-Admin-Protocol", "globalplatform-remote-admin/1.0");
             }
         };
@@ -309,10 +310,7 @@ public class RamHttp extends Transport {
         try {
             // Check if it is not already sent.
             SmSrTransaction.Status status = bt.getStatus();
-            if (status != SmSrTransaction.Status.HttpWait &&
-                    status != SmSrTransaction.Status.Ready &&
-                    status != SmSrTransaction.Status.InProgress &&
-                    status != SmSrTransaction.Status.Sent)
+            if (status != SmSrTransaction.Status.HttpWait && status != SmSrTransaction.Status.Ready && status != SmSrTransaction.Status.InProgress && status != SmSrTransaction.Status.Sent)
                 throw new Exception("This transaction has already completed. Will not re-send it");
             Eis sim = em.find(Eis.class, bt.getEis_id(), LockModeType.PESSIMISTIC_WRITE);
             sim.setLastRAMHttpRequest(Calendar.getInstance().getTime()); // Update date of last HTTP
@@ -345,15 +343,12 @@ public class RamHttp extends Transport {
             bt.setRetries(retries + 1);
 
 
-            resp = new Utils.Http.Response(Response.Status.OK, hdrs,
-                    ctype, body, closeConn);
+            resp = new Utils.Http.Response(Response.Status.OK, hdrs, ctype, body, closeConn);
 
-         //   em.flush(); // Force the changes out. Right?
+            //   em.flush(); // Force the changes out. Right?
         } catch (Exception ex) {
             resp = new Utils.Http.Response(Response.Status.NO_CONTENT, null, null, null, closeConn);
-            Utils.lg.severe(String.format("RAMHTTP.admin.endpoint: Received request to fetch transaction [%s] but " +
-                            "failed to find it: %s",
-                    bt == null ? -1L : bt.getId(), ex));
+            Utils.lg.severe(String.format("RAMHTTP.admin.endpoint: Received request to fetch transaction [%s] but " + "failed to find it: %s", bt == null ? -1L : bt.getId(), ex));
         }
         return resp;
     }
@@ -370,19 +365,16 @@ public class RamHttp extends Transport {
      * @param xstatus
      * @brief Given a single HTTP response, process it, record the result against the transaction
      */
-    private void processSingleResponse(EntityManager em, SmSrTransaction bt,
-                                       byte[] input, boolean success, String xstatus) throws Exception {
+    private void processSingleResponse(EntityManager em, SmSrTransaction bt, byte[] input, boolean success,
+                                       String xstatus) throws Exception {
         // XXX This bit is copied largely from Ota.processMO(). Perhaps we should refactor?
 
 
         try {
             long t = Calendar.getInstance().getTimeInMillis();
             String reqid = String.format("%d", t); // Make fake ReqID
-            bt.getTransObject().handleResponse(em, bt.getId(), success ? TransactionType
-                            .ResponseType
-                            .SUCCESS : TransactionType.ResponseType.ERROR,
-                    reqid,
-                    input); // Do success
+            bt.getTransObject().handleResponse(em, bt.getId(), success ? TransactionType.ResponseType.SUCCESS :
+                    TransactionType.ResponseType.ERROR, reqid, input); // Do success
         } catch (Exception ex) {
 
         }
@@ -394,8 +386,7 @@ public class RamHttp extends Transport {
         Date dt = newStatus != SmSrTransaction.Status.Ready ? Utils.infiniteDate : Calendar.getInstance().getTime();
         bt.setNextSend(dt); // Set next date
         bt.setLastupdate(Calendar.getInstance().getTime());
-        if (success)
-            bt.setLastrequestID(null); // Clear request ID.
+        if (success) bt.setLastrequestID(null); // Clear request ID.
         bt.setSimStatusCode(xstatus);
         bt.setSimResponse(xstatus);
 
@@ -411,7 +402,8 @@ public class RamHttp extends Transport {
      * @param closeConn @return
      * @brief When a HTTP response is received as a response to an APDU sequence sent, process it.
      */
-    private Utils.Http.Response processResponse(EntityManager em, Eis sim, final long tid, byte[] input, boolean closeConn) {
+    private Utils.Http.Response processResponse(EntityManager em, Eis sim, final long tid, byte[] input,
+                                                boolean closeConn) {
         Utils.Http.Response resp;
         // Find the transaction and process the response.
         try {
@@ -423,30 +415,29 @@ public class RamHttp extends Transport {
                 SmSrTransaction bt = em.find(SmSrTransaction.class, tid, LockModeType.PESSIMISTIC_WRITE);
                 TransactionType tobj = bt.getTransObject();
                 byte[] output = rp.getData();
-                Utils.Quad<Boolean, Boolean, String,Ota.ResponseHandler.ETSI102226APDUResponses> xres = Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
+                Utils.Quad<Boolean, Boolean, String, Ota.ResponseHandler.ETSI102226APDUResponses> xres =
+                        Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
                 boolean success = xres.k; // Whether success
                 String xstatus = xres.m;
 
 
                 processSingleResponse(em, bt, output, success, xstatus);
                 nextBt = success ? bt.findNextAvailableTransaction(em) : null;
-              //  em.flush(); // Right?
+                //  em.flush(); // Right?
             } else {
                 // Just a notification: handle it
                 Session session = new Session(em, sim);
-                nextBt = Ota.processNotification(rp.getData(), TransportType.RAMHTTP, session); // Get the one to send next.
+                nextBt = Ota.processNotification(rp.getData(), TransportType.RAMHTTP, session); // Get the one to
+                // send next.
             }
             // Now get the next one in sequence, if any
             if (nextBt != null) {
                 nextBt.setNextSend(Calendar.getInstance().getTime()); // Set to go out
                 resp = transactionToRequest(em, nextBt, closeConn);
-            } else
-                resp = new Utils.Http.Response(Response.Status.NO_CONTENT, null,
-                        null, null, closeConn);
+            } else resp = new Utils.Http.Response(Response.Status.NO_CONTENT, null, null, null, closeConn);
         } catch (Exception ex) {
             resp = new Utils.Http.Response(Response.Status.NO_CONTENT, null, null, null, closeConn);
-            Utils.lg.severe(String.format("RamHTTP.admin.endpoint: Received response to a transaction [%s] but had " +
-                    "problems processing it: %s", tid, ex));
+            Utils.lg.severe(String.format("RamHTTP.admin.endpoint: Received response to a transaction [%s] but had " + "problems processing it: %s", tid, ex));
         }
         return resp;
     }
@@ -463,9 +454,7 @@ public class RamHttp extends Transport {
      * - They modify the OTA parameters (specifically SPI) to ensure PUSH doesn't fail
      */
     @Override
-    public Context getContext(Eis sim, Ota.Params otaParams,
-                              long transID,
-                              int pktSize) {
+    public Context getContext(Eis sim, Ota.Params otaParams, long transID, int pktSize) {
 
         try {
 
@@ -480,16 +469,11 @@ public class RamHttp extends Transport {
             long tnow = System.currentTimeMillis();
 
             // Have we seen a HTTP command recently and are being asked to use HTTP? If so, do not force push
-            if (!ctx.useSms && !otaParams.forcePush &&
-                    lastHttpCommand != null &&
-                    tnow - lastHttpCommand.getTime() < ServerSettings.getRAMAdminHttpKeepAliveTimeOut())
+            if (!ctx.useSms && !otaParams.forcePush && lastHttpCommand != null && tnow - lastHttpCommand.getTime() < ServerSettings.getRAMAdminHttpKeepAliveTimeOut())
                 ctx.forcePush = false;
             else // We have no recent http fetchAFew and we need to push? Then do so.
                 ctx.forcePush = otaParams.forcePush = !ctx.useSms && // Only if not using SMS
-                        (otaParams.forcePush ||
-                                (lastpushRequest == null ||
-                                        tnow - lastpushRequest.getTime() >
-                                                numOpens * ServerSettings.getRamPushRetryTimeOut() * 1000));
+                        (otaParams.forcePush || (lastpushRequest == null || tnow - lastpushRequest.getTime() > numOpens * ServerSettings.getRamPushRetryTimeOut() * 1000));
             if (ctx.forcePush) {
                 // Set the TAR value
                 SecurityDomain sd = sim.findISDR();
@@ -516,10 +500,8 @@ public class RamHttp extends Transport {
     public boolean hasEnoughBuffer(Transport.Context context, int dlen) {
         Context ctx = (Context) context;
 
-        if (ctx.useSms)
-            return smsTransport.hasEnoughBuffer(context, Ota.smsCount(dlen));
-        else
-            return super.hasEnoughBuffer(context, dlen);
+        if (ctx.useSms) return smsTransport.hasEnoughBuffer(context, Ota.smsCount(dlen));
+        else return super.hasEnoughBuffer(context, dlen);
     }
 
     /**
@@ -530,10 +512,7 @@ public class RamHttp extends Transport {
      * @brief Compute the message to send: Either a PUSH or the raw message.
      */
     @Override
-    public byte[] messageToSend(EntityManager em,
-                                Transport.Context context,
-                                Ota.Params params,
-                                byte[] text) {
+    public byte[] messageToSend(EntityManager em, Transport.Context context, Ota.Params params, byte[] text) {
         Context ctx = (Context) context;
         // If we are using push, return the push command
         if (ctx.forcePush) {
@@ -546,13 +525,13 @@ public class RamHttp extends Transport {
     @Override
     public String getUnit(Transport.Context context) {
         Context ctx = (Context) context;
-        if (ctx.forcePush || ctx.useSms)
-            return smsTransport.getUnit(context);
+        if (ctx.forcePush || ctx.useSms) return smsTransport.getUnit(context);
         return unit;
     }
 
     @Override
-    public Utils.Triple<Integer, MessageStatus, Long> sendMsg(EntityManager em, Transport.Context context, byte[] msg, int dlr_flags) throws Exception {
+    public Utils.Triple<Integer, MessageStatus, Long> sendMsg(EntityManager em, Transport.Context context, byte[] msg
+            , int dlr_flags) throws Exception {
         Context ctx = (Context) context;
 
         boolean useSms = ctx.forcePush || ctx.useSms;
@@ -560,13 +539,13 @@ public class RamHttp extends Transport {
         if (useSms) {
             Date tnow = Calendar.getInstance().getTime();
             if (ctx.forcePush) {
-                Utils.lg.info(String.format("RAMHTTP: Preparing to send PUSH to [%s] for trans [#%s]", ctx.sim
-                        .activeMISDN(), ctx
-                        .tid));
+                Utils.lg.info(String.format("RAMHTTP: Preparing to send PUSH to [%s] for trans [#%s]",
+                        ctx.sim.activeMISDN(), ctx.tid));
                 sim.setLastRAMPushRequest(tnow);
                 sim.setNumPendingRAMRequests(sim.getNumPendingRAMRequests() + 1);
             }
-            Utils.Triple<Integer, MessageStatus, Long> xres = smsTransport.sendMsg(em, context, msg, ctx.forcePush ? DLR_DELIVERED_TO_PHONE : dlr_flags); // When using the simple protocol, track as usual
+            Utils.Triple<Integer, MessageStatus, Long> xres = smsTransport.sendMsg(em, context, msg, ctx.forcePush ?
+                    DLR_DELIVERED_TO_PHONE : dlr_flags); // When using the simple protocol, track as usual
             MessageStatus status;
             long nextt;
 
@@ -658,26 +637,21 @@ public class RamHttp extends Transport {
             byte[] eid = null;
             byte[] aid = null;
             int keyversion = -1, keyindex = -1;
-            while (in.available() > 0 &&
-                    (res = Utils.BER.decodeTLV(in)) != null) {
+            while (in.available() > 0 && (res = Utils.BER.decodeTLV(in)) != null) {
                 byte[] data = Utils.getBytes(res.k);
 
-                if (res.l == PSKID_EID_TAG)
-                    eid = data;
-                else if (res.l == PSKID_AID_TAG)
-                    aid = data;
-                else if (res.l == PSK_KEY_ID_TAG)
-                    keyindex = data[0];
-                else if (res.l == PSK_KEY_VERSION_TAG)
-                    keyversion = data[0];
+                if (res.l == PSKID_EID_TAG) eid = data;
+                else if (res.l == PSKID_AID_TAG) aid = data;
+                else if (res.l == PSK_KEY_ID_TAG) keyindex = data[0];
+                else if (res.l == PSK_KEY_VERSION_TAG) keyversion = data[0];
             }
 
             // Get the SIM
             String xeis = Utils.HEX.b2H(eid);
             Eis sim = Eis.findByEid(em, xeis);
             if (sim == null)
-                throw new Exception(String.format("No such euicc [%s] in received PSK ID [%s]", xeis, Utils.HEX.b2H
-                        (pskID)));
+                throw new Exception(String.format("No such euicc [%s] in received PSK ID [%s]", xeis,
+                        Utils.HEX.b2H(pskID)));
             SecurityDomain isdr = sim.findISDR(); // Ignore the AID, right?
 
             // Get key from ISDR
@@ -691,8 +665,7 @@ public class RamHttp extends Transport {
             KeyComponent kc = null;
             // Now look for one with a matching usable type
             for (Key key : ks.getKeys())
-                if (key.getIndex() == keyindex &&
-                        (kc = key.findSuitableKeycomponent(ALLOWED_KEYS_TYPES)) != null) {
+                if (key.getIndex() == keyindex && (kc = key.findSuitableKeycomponent(ALLOWED_KEYS_TYPES)) != null) {
                     break;
                 }
             if (kc == null)
@@ -724,16 +697,14 @@ public class RamHttp extends Transport {
             // Start the server thread
             th = new Thread(() -> {
                 Utils.lg.info(String.format("Starting Ram HTTP admin agent port handler on [%s]...", port));
-                while (true)
-                    try {
-                        Socket client = socket.accept();
-                      //  TlsServerProtocol s = new TlsServerProtocol(client.getInputStream(), client.getOutputStream());
-                        HttpTlsServer server = new HttpTlsServer(client);
-                        runner.submit(server); // Put it on queue and go away...
-                    } catch (Exception ex) {
-                        // All others close it.
-                        break;
-                    }
+                while (true) try {
+                    Socket client = socket.accept();
+                    HttpTlsServer server = new HttpTlsServer(client);
+                    runner.submit(server); // Put it on queue and go away...
+                } catch (Exception ex) {
+                    // All others close it.
+                    break;
+                }
                 Utils.lg.info(String.format("Stopping Ram HTTP admin agent port handler on [%s]", port));
 
             });
@@ -772,8 +743,7 @@ public class RamHttp extends Transport {
 
                         return res.k;
                     });
-                } else
-                    return null;
+                } else return null;
             }
 
             public Long getSimId() {
@@ -803,7 +773,7 @@ public class RamHttp extends Transport {
             @Override
             public void run() {
                 try {
-                   // SecureRandom srand = new SecureRandom();
+                    // SecureRandom srand = new SecureRandom();
 
                     TlsServerProtocol s = new TlsServerProtocol(socket.getInputStream(), socket.getOutputStream());
                     final PskTlsServ tlsServer = new PskTlsServ();
@@ -813,18 +783,9 @@ public class RamHttp extends Transport {
 
                     socket.setSoTimeout(HTTP_SOCKET_WAIT_FACTOR * ServerSettings.getRAMAdminHttpKeepAliveTimeOut() * 1000);
                     PersistenceUtility po = poTasks.get();
-                    po.doTransaction(new PersistenceUtility.Runner<Object>() {
-                        @Override
-                        public Object run(PersistenceUtility po, EntityManager em) throws Exception {
-                            runHttpSession(em, in,
-                                    out, tlsServer.getSimId());
-                            return null;
-                        }
-
-                        @Override
-                        public void cleanup(boolean s) {
-
-                        }
+                    po.doTransaction((po1, em) -> {
+                        runHttpSession(em, in, out, tlsServer.getSimId());
+                        return null;
                     });
 
                     socket.close(); // Close it
@@ -835,7 +796,8 @@ public class RamHttp extends Transport {
             }
 
             /**
-             * Process an HTTP session from the card: Parse http packet, call the relevant function internally to process the data received
+             * Process an HTTP session from the card: Parse http packet, call the relevant function internally to
+             * process the data received
              *
              * @param em
              * @param in
@@ -847,59 +809,57 @@ public class RamHttp extends Transport {
                 int maxReqs = ServerSettings.getRAMAdminHttpMaxRequests();
                 int reqs = 0;
 
-                while (reqs < maxReqs)
+                while (reqs < maxReqs) try {
+
+                    Utils.Http.Request req = new Utils.Http.Request(in);
+
+                    long tid;
+
+                    reqs++;
+                    // Try to get the IDs from the args array
                     try {
+                        tid = Long.parseLong(req.args[req.args.length - 1]);
+                    } catch (Exception ex) {
+                        tid = -1;
+                    }
+                    Eis euicc = em.find(Eis.class, simId, LockModeType.PESSIMISTIC_WRITE); // Get the SIM card,
+                    // right??
+                    euicc.setNumPendingRAMRequests(0); // Clear the number of pending requests. We got a connection.
 
-                        Utils.Http.Request req = new Utils.Http.Request(in);
+                    // em.flush(); // Force changes out. Right?
+                    Utils.Http.Response response;
+                    boolean closeConn = (reqs == maxReqs);
+                    String xAdminFrom = req.headers.get("X-Admin-From");
+                    Object msgData = req.cgiParams.get("msg");
+                    boolean hasMsgData = (msgData != null) && (msgData instanceof String); // Sec 3.15.2
+                    // notification via HTTPS: It is hex-coded as per spec
+                    byte[] inputData = hasMsgData ? Utils.HEX.h2b((String) msgData) : req.body;
 
-                        long tid;
-
-                        reqs++;
-                        // Try to get the IDs from the args array
-                        try {
-                            tid = Long.parseLong(req.args[req.args.length - 1]);
+                    if (hasMsgData || req.uriVerb.equalsIgnoreCase(RamHttp.DISPATCHER_RESULT_URI)) {
+                        StatsCollector.recordTransportEvent(TransportType.RAMHTTP, PacketType.MO); // Record
+                        // incoming stat
+                        response = processResponse(em, euicc, tid, inputData, closeConn);
+                    } else /* if (req.uriVerb.equalsIgnoreCase(DISPATCHER_URI)) */ {
+                        if (tid < 0) try {
+                            SmSrTransaction bt = SmSrTransaction.findfirstTransaction(em, euicc.getId(),
+                                    SmSrTransaction.Status.HttpWait);
+                            tid = bt.getId();
                         } catch (Exception ex) {
-                            tid = -1;
                         }
-                        Eis euicc = em.find(Eis.class, simId, LockModeType.PESSIMISTIC_WRITE); // Get the SIM card,
-                        // right??
-                        euicc.setNumPendingRAMRequests(0); // Clear the number of pending requests. We got a connection.
-
-                       // em.flush(); // Force changes out. Right?
-                        Utils.Http.Response response;
-                        boolean closeConn = (reqs == maxReqs);
-                        String xAdminFrom = req.headers.get("X-Admin-From");
-                        Object msgData = req.cgiParams.get("msg");
-                        boolean hasMsgData = (msgData != null) && (msgData instanceof String); // Sec 3.15.2
-                        // notification via HTTPS: It is hex-coded as per spec
-                        byte[] inputData = hasMsgData ? Utils.HEX.h2b((String) msgData) : req.body;
-
-                        if (hasMsgData || req.uriVerb.equalsIgnoreCase(RamHttp.DISPATCHER_RESULT_URI)) {
-                            StatsCollector.recordTransportEvent(TransportType.RAMHTTP, PacketType.MO); // Record
-                            // incoming stat
-                            response = processResponse(em, euicc, tid, inputData, closeConn);
-                        } else /* if (req.uriVerb.equalsIgnoreCase(DISPATCHER_URI)) */ {
-                            if (tid < 0)
-                                try {
-                                    SmSrTransaction bt = SmSrTransaction.findfirstTransaction(em, euicc.getId(),
-                                            SmSrTransaction.Status.HttpWait);
-                                    tid = bt.getId();
-                                } catch (Exception ex) {
-                                }
-                            response = transactionToRequest(em, tid, closeConn);
-                        }
+                        response = transactionToRequest(em, tid, closeConn);
+                    }
                         /*
                         else
                             response = new Utils.Http.Response(Response.Status.FORBIDDEN, null, null, null, closeConn);
                             */
-                        response.version = req.version; // Copy version over.
-                        response.outputMessage(out);
+                    response.version = req.version; // Copy version over.
+                    response.outputMessage(out);
 
-                        if (response.status == Response.Status.OK)
-                            StatsCollector.recordTransportEvent(TransportType.RAMHTTP, PacketType.MT);
-                    } catch (Exception ex) {
-                        break; // We are done
-                    }
+                    if (response.status == Response.Status.OK)
+                        StatsCollector.recordTransportEvent(TransportType.RAMHTTP, PacketType.MT);
+                } catch (Exception ex) {
+                    break; // We are done
+                }
 
             }
         }
@@ -917,22 +877,37 @@ public class RamHttp extends Transport {
                 identityManager = (IdentityManager) this.pskIdentityManager;
             }
 
+            @Override
+            public void notifyClientVersion(ProtocolVersion version) throws IOException {
+                Utils.lg.info(String.format("Received TLS client v%s", version));
+            }
+
+            @Override
+            public void notifyOfferedCipherSuites(int[] offered) throws IOException {
+                super.notifyOfferedCipherSuites(offered);
+
+            }
             // Cipher suites
             @Override
+            protected int[] getSupportedCipherSuites() {
+                return SUPPORTED_CIPHERS;
+            }
+
+            @Override
             public int[] getCipherSuites() {
-                return new int[]{CipherSuite.TLS_PSK_WITH_3DES_EDE_CBC_SHA,
-                        CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA,
-                        CipherSuite.TLS_PSK_WITH_AES_128_GCM_SHA256,
-                        CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA256,
-                       // CipherSuite.TLS_PSK_WITH_NULL_SHA,
-                        CipherSuite.TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA,
-                        CipherSuite.TLS_RSA_PSK_WITH_AES_128_CBC_SHA};
+                return SUPPORTED_CIPHERS;
             }
 
             public Long getSimId() {
                 return identityManager.getSimId();
             }
 
+            @Override
+            public void notifySecureRenegotiation(boolean secureRenegotiation) throws IOException
+            {
+                // Do nothing.....
+                Utils.lg.info("TLS-PSK server re-negotiated set to " + secureRenegotiation);
+            }
 
             @Override
             public ProtocolVersion getMaximumVersion() {
@@ -940,11 +915,15 @@ public class RamHttp extends Transport {
             }
 
 
-            protected ProtocolVersion[] getSupportedVersions()
-            {
+            protected ProtocolVersion[] getSupportedVersions() {
                 return ProtocolVersion.TLSv12.only();
             }
 
+            @Override
+            public boolean shouldUseGMTUnixTime()
+            {
+                return true;
+            }
 
             @Override
             public ProtocolVersion getServerVersion() throws IOException {
@@ -957,28 +936,23 @@ public class RamHttp extends Transport {
 
             @Override
             public void notifyAlertRaised(short alertLevel, short alertDescription, String message, Throwable cause) {
-                String msg = "TLS-PSK server raised alert: " + AlertLevel.getText(alertLevel) + ", "
-                        + AlertDescription.getText(alertDescription);
+                String msg =
+                        "TLS-PSK server raised alert: " + AlertLevel.getText(alertLevel) + ", " + AlertDescription.getText(alertDescription);
                 if (message != null) {
                     msg += "> " + message;
                 }
 
-                if (cause != null)
-                    msg += ": " + cause.toString();
-                if (alertLevel == AlertLevel.fatal)
-                    Utils.lg.severe(msg);
-                else
-                    Utils.lg.info(msg);
+                if (cause != null) msg += ": " + cause.toString();
+                if (alertLevel == AlertLevel.fatal) Utils.lg.severe(msg);
+                else Utils.lg.info(msg);
             }
 
             @Override
             public void notifyAlertReceived(short alertLevel, short alertDescription) {
-                String msg = "TLS-PSK server received alert: " + AlertLevel.getText(alertLevel) + ", "
-                        + AlertDescription.getText(alertDescription);
-                if (alertLevel == AlertLevel.fatal)
-                    Utils.lg.severe(msg);
-                else
-                    Utils.lg.info(msg);
+                String msg =
+                        "TLS-PSK server received alert: " + AlertLevel.getText(alertLevel) + ", " + AlertDescription.getText(alertDescription);
+                if (alertLevel == AlertLevel.fatal) Utils.lg.severe(msg);
+                else Utils.lg.info(msg);
             }
 
             @Override
@@ -995,6 +969,8 @@ public class RamHttp extends Transport {
             // XX Do we need getRSAEncryptionCredentials()??
         }
 
+
+
     }
 
     /**
@@ -1007,9 +983,7 @@ public class RamHttp extends Transport {
         public boolean useSms;
         public boolean useRamHttp; //!< Whether to use GP RAM over HTTP.
 
-        public Context(Eis sim,
-                       long tid,
-                       int pktSize) {
+        public Context(Eis sim, long tid, int pktSize) {
             super(sim, DEFAULT_HTTP_BUFFER_LEN, false, false, false);
             this.tid = tid;
 
@@ -1023,8 +997,7 @@ public class RamHttp extends Transport {
                     Utils.lg.severe(String.format("RAM.getContext(%s, tid=%s): Failed to make Push command: %s", sim,
                             tid, ex));
                 }
-            } else
-                useSms = true;
+            } else useSms = true;
         }
 
         /**
@@ -1037,14 +1010,14 @@ public class RamHttp extends Transport {
          */
         private byte[] makeRAMHttpPushCommand(final Eis sim) throws Exception {
 
-            if (ServerSettings.getRamUseDefaultConfig())
-                return new byte[]{(byte) 0x81, 0x00};
+            if (ServerSettings.getRamUseDefaultConfig()) return new byte[]{(byte) 0x81, 0x00};
 
             ByteArrayOutputStream xos = new ByteArrayOutputStream();
             ByteArrayOutputStream os = new ByteArrayOutputStream();
 
             // Make the connection params: Use the BIP parameters, same as with Push command in BIP code
-            byte[] connParams = BipCatTP.makeOpenChannelTLVs(ServerSettings.getRamhttpAdminPort(), BipCatTP.OPEN_CHANNEL_TCP_CLIENT_MODE);
+            byte[] connParams = BipCatTP.makeOpenChannelTLVs(ServerSettings.getRamhttpAdminPort(),
+                    BipCatTP.OPEN_CHANNEL_TCP_CLIENT_MODE);
 
             // Security params
             // final boolean sendPskId = true; // Send PSK ID
@@ -1068,21 +1041,14 @@ public class RamHttp extends Transport {
             int rinterval = ServerSettings.getRamPushRetryTimeOut();
 
             ByteArrayOutputStream retry = new ByteArrayOutputStream();
-            if (xretries > 0)
-                retry.write(new byte[]{
-                        (byte) ((xretries >> 8) & 0xFF),
-                        (byte) (xretries & 0xFF),
-                        // Timer values
-                        TIMER_VALUE_BER_TAG,
-                        0x03,
-                        (byte) ((rinterval / 3600) & 0xFF), // Hours
-                        (byte) (((rinterval / 60) % 60) & 0xFF), // Minutes
-                        (byte) ((rinterval % 60) & 0xFF), // Seconds
+            if (xretries > 0) retry.write(new byte[]{(byte) ((xretries >> 8) & 0xFF), (byte) (xretries & 0xFF),
+                    // Timer values
+                    TIMER_VALUE_BER_TAG, 0x03, (byte) ((rinterval / 3600) & 0xFF), // Hours
+                    (byte) (((rinterval / 60) % 60) & 0xFF), // Minutes
+                    (byte) ((rinterval % 60) & 0xFF), // Seconds
 
-                        // Reply SMS, Tag only, no params
-                        RETRY_FAILURE_REPORT_TAG,
-                        0
-                });
+                    // Reply SMS, Tag only, no params
+                    RETRY_FAILURE_REPORT_TAG, 0});
 
 
             // HTTP POST params
@@ -1105,10 +1071,8 @@ public class RamHttp extends Transport {
 
             Utils.BER.appendTLV(confParams, CONNECTION_PARAMS_TAG, connParams);
 
-            if (psk.size() > 0)
-                Utils.BER.appendTLV(confParams, SECURITY_PARAMS_TAG, psk.toByteArray());
-            if (retry.size() > 0)
-                Utils.BER.appendTLV(confParams, RETRY_POLICY_PARAMS_TAG, retry.toByteArray());
+            if (psk.size() > 0) Utils.BER.appendTLV(confParams, SECURITY_PARAMS_TAG, psk.toByteArray());
+            if (retry.size() > 0) Utils.BER.appendTLV(confParams, RETRY_POLICY_PARAMS_TAG, retry.toByteArray());
             Utils.BER.appendTLV(confParams, ADMIN_HTTP_POST_PARAMS_TAG, postParams.toByteArray());
 
             if (confParams.size() > 0)

@@ -4,21 +4,11 @@
     <deployment>
 
         <exclusions>
-            <!-- Remove this one so HibernateProxy missing is not reported -->
-           <!-- <module name="org.hibernate"/> -->
-            <!-- <module name="org.antlr"/> -->
-          <!--  <module name="org.picketlink"/>  -->
+
             <module name="org.apache.log4j" />
         </exclusions>
         <dependencies>
-            <!-- We need the org.hibernate dependency to remove the noclassdef org.hibernate.proxy.HibernateProxy error when deploying. Don't ask.
-             - No we don't. Just remove the exclusion one above as well!
-            <module name="org.hibernate"/> -->
-         <!--  <module name="org.picketlink"/>
-          <module name="javax.ws.rs.api" export="true"/>
 
--->
-          <!--  <module name="org.jboss.security.xacml" /> -->
 
             <!-- bouncy castle needs to be globally deployed to avoid JCE errors -->
             <module name="org.bouncycastle" slot="main" export="true" />
