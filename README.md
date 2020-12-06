@@ -20,7 +20,7 @@
 
 ## System Requirements
  Njiwa is a Java-based server Web Service. It has been developed and tested
- on [JBOSS Wildfly v15.x](http://www.wildfly.org), but should run well under
+ on [JBOSS Wildfly v21.x](http://www.wildfly.org), but should run well under
  your favourite Web Services container. The main requirements for developing with or running Njiwa are:
 
 * Java 8 (JDK/JRE 1.8) or better
