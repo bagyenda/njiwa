@@ -727,6 +727,7 @@ public class RamHttp extends Transport {
                 while (true)
                     try {
                         Socket client = socket.accept();
+                      //  TlsServerProtocol s = new TlsServerProtocol(client.getInputStream(), client.getOutputStream());
                         HttpTlsServer server = new HttpTlsServer(client);
                         runner.submit(server); // Put it on queue and go away...
                     } catch (Exception ex) {

@@ -870,7 +870,7 @@ public class ServerSettings {
         public static final String REST_ENDPOINT = "/rest";
         public static final String DLR_URI = "/dlr"; //!< The DLR partial URL
         public static final String version = "1.0";
-        public static final String build = "20190207";
+        public static final String build = "20201206";
         public static final String release = String.format("v%s (Build %s)", version, build);
         public static final String serverName = String.format("eUICC Remote Subscription Management Server %s",
                 release);
