@@ -33,6 +33,9 @@ public class KeyComponent {
             KeyComponent.Type.DES_ECB, KeyComponent.Type.DES, KeyComponent.Type.TripleDES, KeyComponent.Type
             .TripleDES_CBC, KeyComponent.Type.AES
     };
+    public static final KeyComponent.Type[] suitableGPCAmmendBTypes = {
+        Type.PSK_TLS
+    };
     @Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "keycomponent")
@@ -133,13 +136,14 @@ public class KeyComponent {
         return ((idx << 4) | keytype) & 0xFF;
     }
 
-    // Integer values are from Table 11.1.8 of GPC v2.3
+    // Integer values are from Table 11.1.8 of GPC v2.3 & Table 3-1 of GPC Ammendment B.
     public  enum Type {
-        RFU(0), DES(0x80),TripleDES(0x81),
+        RFU(0), DES(0x80),
+        TripleDES(0x81),
         TripleDES_CBC(0x82),
         DES_ECB(0x83),
         DES_CBC(0x84),
-        PSK_TLS(0x84),
+        PSK_TLS(0x85),
         AES(0x88),
         HMAC_SHA1(0x90),
         HMAC_SHA1_160(0x91),

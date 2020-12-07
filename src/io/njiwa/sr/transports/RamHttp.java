@@ -77,11 +77,11 @@ public class RamHttp extends Transport {
     public static final String DISPATCHER_RESULT_URI = "ramNext";
 
     public static final byte[] RAM_HTTP_ADMIN_AGENT_TAR_B;
-    public static final short REMOTE_ADMIN_REQUEST_TAG = 0x81; //!< The top-level PUSH SMS TAG
+    public static final short ADMIN_SESSION_TRIGGER_PARAMS_TAG = 0x81; //!< The top-level PUSH SMS TAG
     public static final short CONFIGURATION_RESOURCE_URL_TAG = 0x82; //!<  SCWS config resource PUSH SMS TAG
-    public static final short ADMIN_AGENT_CONFIGURATION_PARAMS_TAG = 0x83; //!< Agent config resource PUSH SMS TAG
+    public static final short SECURITY_DOMAIN_PARAMS_TAG = 0x83; //!< Agent config resource PUSH SMS TAG
     public static final short CONNECTION_PARAMS_TAG = 0x84; //!<  Connection params in PUSH SMS TAG
-    public static final short SECURITY_PARAMS_TAG = 0x85; //!<  Security params in PUSH SMS TAG
+    public static final short SECURITY_DOMAIN_ADMIN_SESSION_PARAMS_TAG = 0x85; //!<  Security params in PUSH SMS TAG
     public static final short RETRY_POLICY_PARAMS_TAG = 0x86; //!< Retry policy in PUSH SMS TAG
     public static final byte RETRY_FAILURE_REPORT_TAG = (byte) 0x87; //!< Retry failure report in PUSH SMS TAG
     public static final String APPLICATION_VND_GPC = "application/vnd.globalplatform.card-content-mgt;version=1.0";
@@ -104,10 +104,6 @@ public class RamHttp extends Transport {
     private static final short PSKID_AID_TAG = 0x4F;
     private static final short PSK_KEY_ID_TAG = 0x82;
     private static final short PSK_KEY_VERSION_TAG = 0x83;
-    private static final KeyComponent.Type[] ALLOWED_KEYS_TYPES = new KeyComponent.Type[]{
-            //    KeyComponent.Type.DES, KeyComponent.Type.TripleDES, KeyComponent.Type.TripleDES_CBC,
-            //    KeyComponent.Type.DES_ECB, KeyComponent.Type.AES,
-            KeyComponent.Type.PSK_TLS};
     public static final int[] SUPPORTED_CIPHERS = {CipherSuite.TLS_PSK_WITH_3DES_EDE_CBC_SHA, CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA,
             CipherSuite.TLS_PSK_WITH_AES_128_GCM_SHA256, CipherSuite.TLS_PSK_WITH_AES_128_CBC_SHA256,
             // CipherSuite.TLS_PSK_WITH_NULL_SHA,
@@ -577,42 +573,32 @@ public class RamHttp extends Transport {
             final String eid = sim.getEid();
             // Find first usable key:
             // 1. Find SCP81 keyset
-            KeySet ks = new KeySet();
-            for (KeySet keyset : sd.getKeysets())
-                if (keyset.keysetType() == KeySet.Type.SCP81) {
-                    ks = keyset;
-                    break;
-                }
 
-            Key k = new Key();
+            KeyComponent pskKeyComponent = sd.findFirstSCP81Key();
+            int keyIdx = pskKeyComponent.getKey().getIndex();
+            int keyVer = pskKeyComponent.getKey().getKeyset().getVersion();
 
-            // Now look for one with a matching usable type
-            for (Key key : ks.getKeys())
-                if (key.findSuitableKeycomponent(ALLOWED_KEYS_TYPES) != null) {
-                    k = key;
-                    break;
-                }
-
-            ByteArrayOutputStream os = new ByteArrayOutputStream() {
+            // See Table 4 of SGP02 v4.1
+            byte[] rawPsk = new ByteArrayOutputStream() {
                 {
                     Utils.BER.appendTLV(this, PSK_ID_SGP_FORMAT, new byte[]{0x02});
-                    Utils.BER.appendTLV(this, PSKID_EID_TAG, Utils.HEX.h2b(eid));
-                    Utils.BER.appendTLV(this, PSKID_AID_TAG, Utils.HEX.h2b(sd.getAid()));
+                    byte[] xeid = Utils.HEX.h2b(eid);
+                    Utils.BER.appendTLV(this, PSKID_EID_TAG, xeid);
+                    byte[] xaid = Utils.HEX.h2b(sd.getAid());
+                    Utils.BER.appendTLV(this, PSKID_AID_TAG, xaid);
+
+                    Utils.BER.appendTLV(this, PSK_KEY_ID_TAG, new byte[]{(byte) keyIdx});
+                    Utils.BER.appendTLV(this, PSK_KEY_VERSION_TAG, new byte[]{(byte) keyVer});
                 }
-            };
-            int keyIdx = k.getIndex();
-            int keyVer = ks.getVersion();
-            Utils.BER.appendTLV(os, PSK_KEY_ID_TAG, new byte[]{(byte) keyIdx});
-            Utils.BER.appendTLV(os, PSK_KEY_VERSION_TAG, new byte[]{(byte) keyVer});
+            }.toByteArray();
 
-            byte[] rawPsk = os.toByteArray();
             // This is as per Sec 3.7.3 of the GP RAM HTTP doc
-            byte[] version = new byte[]{2, (byte) keyVer, (byte) keyIdx};
-            return new Utils.Pair<>(Utils.HEX.b2H(rawPsk).getBytes(StandardCharsets.UTF_8), version); // Because it
-            // must
-            // be a UTF-8 literal
-        } catch (Exception ex) {
+            byte[] version = new byte[]{(byte) keyVer, (byte) keyIdx};
+            // SGP.02 says the Psk ID must be UTF-8 encoded hex. so...
+            return new Utils.Pair<>(Utils.HEX.b2H(rawPsk).getBytes(StandardCharsets.UTF_8), version);
 
+        } catch (Exception ex) {
+            String xs = ex.getMessage();
         }
         return new Utils.Pair<>(new byte[0], new byte[0]);
     }
@@ -654,20 +640,8 @@ public class RamHttp extends Transport {
                         Utils.HEX.b2H(pskID)));
             SecurityDomain isdr = sim.findISDR(); // Ignore the AID, right?
 
-            // Get key from ISDR
-            KeySet ks = new KeySet();
-            for (KeySet keyset : isdr.getKeysets())
-                if (keyset.keysetType() == KeySet.Type.SCP81 && ks.getVersion() == keyversion) {
-                    ks = keyset;
-                    break;
-                }
-
-            KeyComponent kc = null;
-            // Now look for one with a matching usable type
-            for (Key key : ks.getKeys())
-                if (key.getIndex() == keyindex && (kc = key.findSuitableKeycomponent(ALLOWED_KEYS_TYPES)) != null) {
-                    break;
-                }
+           // Find key component
+            KeyComponent kc = isdr.findKeyComponent(KeySet.Type.SCP81,keyversion,keyindex, KeyComponent.Type.PSK_TLS);
             if (kc == null)
                 throw new Exception(String.format("No such key with version=%02x, index = %02x received in TLS " +
                         "handshake with euicc [%s]", keyversion, keyindex, xeis));
@@ -1005,82 +979,90 @@ public class RamHttp extends Transport {
          * @return
          * @throws Exception
          * @brief Make the Push command
-         * @details Make the SCWS/RAM PUSH Command for a given SIM. This involves creating the PUSH SMS
-         * in accordance with the GP or SCWS spec. in a straightforward manner.
+         * @details Make the GPC Ammend B PUSH Command for a given eUICC
+         * See Sec 3.7.1 of GPC Ammendment B v1.1.2
          */
         private byte[] makeRAMHttpPushCommand(final Eis sim) throws Exception {
 
-            if (ServerSettings.getRamUseDefaultConfig()) return new byte[]{(byte) 0x81, 0x00};
-
-            ByteArrayOutputStream xos = new ByteArrayOutputStream();
-            ByteArrayOutputStream os = new ByteArrayOutputStream();
-
-            // Make the connection params: Use the BIP parameters, same as with Push command in BIP code
-            byte[] connParams = BipCatTP.makeOpenChannelTLVs(ServerSettings.getRamhttpAdminPort(),
-                    BipCatTP.OPEN_CHANNEL_TCP_CLIENT_MODE);
-
-            // Security params
-            // final boolean sendPskId = true; // Send PSK ID
-            ByteArrayOutputStream psk = new ByteArrayOutputStream() {
-                {
-                    Utils.Pair<byte[], byte[]> r = makePskId(sim);
-                    byte[] pskId = r.k;
-                    byte[] verIdx = r.l;
-                    write(pskId.length);
-                    write(pskId);
-
-                    write(verIdx.length); // length of version and index
-                    write(verIdx); // Version and key
-                }
-            };
-
-            // Retry policy
-            int xretries = ServerSettings.getRamOpenChannelRetries(); // Same for RAM HTTP
-
-            // Retry interval
-            int rinterval = ServerSettings.getRamPushRetryTimeOut();
-
-            ByteArrayOutputStream retry = new ByteArrayOutputStream();
-            if (xretries > 0) retry.write(new byte[]{(byte) ((xretries >> 8) & 0xFF), (byte) (xretries & 0xFF),
-                    // Timer values
-                    TIMER_VALUE_BER_TAG, 0x03, (byte) ((rinterval / 3600) & 0xFF), // Hours
-                    (byte) (((rinterval / 60) % 60) & 0xFF), // Minutes
-                    (byte) ((rinterval % 60) & 0xFF), // Seconds
-
-                    // Reply SMS, Tag only, no params
-                    RETRY_FAILURE_REPORT_TAG, 0});
-
-
-            // HTTP POST params
-            ByteArrayOutputStream postParams = new ByteArrayOutputStream();
-
-            //  Utils.appendTlv(postParams, ADMIN_HOST_PARAM_TAG,
-            //          Properties.getMyhostname().getBytes("UTF-8"));
-
-            // Put in the Agent ID as ICCID
-            String agentID = formatRamHTTPXAdminFrom(sim);
-            Utils.BER.appendTLV(postParams, AGENT_ID_PARAM_TAG, agentID.getBytes(StandardCharsets.UTF_8));
-
-            // Put in transaction ID and fetchAFewPending URL
-            String rUri = DISPATCHER_URI;
-            String adminUri = String.format("/%s/%s", rUri, tid);
-            Utils.BER.appendTLV(postParams, RamHttp.ADMIN_URI_PARAM_TAG, adminUri.getBytes(StandardCharsets.UTF_8));
+            if (ServerSettings.getRamUseDefaultConfig())
+                return new byte[]{(byte) 0x81, 0x00}; // XX really?
 
             // Now build the agent conf params according to Sec 13.3.2.9.2 of the SCWS or Sec 3.7 of GP 2.2 Adendum B
-            ByteArrayOutputStream confParams = new ByteArrayOutputStream();
+            byte[] secDomainAdminSessionParams = new ByteArrayOutputStream() {
+                {
+                    // Make the connection params: Use the BIP parameters, same as with Push command in BIP code
+                    byte[] connParams = BipCatTP.makeOpenChannelTLVs(ServerSettings.getRamhttpAdminPort(),
+                            BipCatTP.OPEN_CHANNEL_TCP_CLIENT_MODE);
 
-            Utils.BER.appendTLV(confParams, CONNECTION_PARAMS_TAG, connParams);
+                    Utils.BER.appendTLV(this, CONNECTION_PARAMS_TAG, connParams);
 
-            if (psk.size() > 0) Utils.BER.appendTLV(confParams, SECURITY_PARAMS_TAG, psk.toByteArray());
-            if (retry.size() > 0) Utils.BER.appendTLV(confParams, RETRY_POLICY_PARAMS_TAG, retry.toByteArray());
-            Utils.BER.appendTLV(confParams, ADMIN_HTTP_POST_PARAMS_TAG, postParams.toByteArray());
+                    // Security params
+                    byte[] psk = new ByteArrayOutputStream() {
+                        {
+                            Utils.Pair<byte[], byte[]> r = makePskId(sim);
+                            byte[] pskId = r.k;
+                            byte[] verIdx = r.l;
+                            write(pskId.length);
+                            write(pskId);
 
-            if (confParams.size() > 0)
-                Utils.BER.appendTLV(xos, ADMIN_AGENT_CONFIGURATION_PARAMS_TAG, confParams.toByteArray());
+                            write(verIdx.length); // length of version and index
+                            write(verIdx); // Version and key
+                        }
+                    }.toByteArray();
 
-            Utils.BER.appendTLV(os, REMOTE_ADMIN_REQUEST_TAG, xos.toByteArray());
+                    Utils.BER.appendTLV(this, SECURITY_DOMAIN_ADMIN_SESSION_PARAMS_TAG, psk);
 
-            return os.toByteArray();
+                    // Retry policy
+                    int xretries = ServerSettings.getRamOpenChannelRetries(); // Same for RAM HTTP
+                    if (xretries > 0) {
+                        // Retry interval
+                        int rinterval = ServerSettings.getRamPushRetryTimeOut();
+
+                        byte[]  retry = new ByteArrayOutputStream() {
+                            {
+                                write(new byte[]{(byte) ((xretries >> 8) & 0xFF), (byte) (xretries & 0xFF),
+                                        // Timer values
+                                        TIMER_VALUE_BER_TAG, 0x03, (byte) ((rinterval / 3600) & 0xFF), // Hours
+                                        (byte) (((rinterval / 60) % 60) & 0xFF), // Minutes
+                                        (byte) ((rinterval % 60) & 0xFF), // Seconds
+
+                                        // Reply SMS, Tag only, no params
+                                        RETRY_FAILURE_REPORT_TAG, 0});
+                            }
+                        }.toByteArray();
+                        Utils.BER.appendTLV(this, RETRY_POLICY_PARAMS_TAG, retry);
+                    }
+
+                    // HTTP POST params
+                    byte[] postParams = new ByteArrayOutputStream() {
+                        {
+                            // Put in the Agent ID as ICCID
+                            String agentID = formatRamHTTPXAdminFrom(sim);
+                            Utils.BER.appendTLV(this, AGENT_ID_PARAM_TAG, agentID.getBytes(StandardCharsets.UTF_8));
+                            // Put in transaction ID and fetchAFewPending URL
+                            String rUri = DISPATCHER_URI;
+                            String adminUri = String.format("/%s/%s", rUri, tid);
+                            Utils.BER.appendTLV(this, RamHttp.ADMIN_URI_PARAM_TAG, adminUri.getBytes(StandardCharsets.UTF_8));
+                        }
+                    }.toByteArray();
+                    Utils.BER.appendTLV(this, ADMIN_HTTP_POST_PARAMS_TAG, postParams);
+
+                }
+            }.toByteArray();
+
+
+            byte[] triggerParams = new ByteArrayOutputStream() {
+                {
+                    byte[] securityDomainParameterValues = new ByteArrayOutputStream() {
+                        {
+                            Utils.BER.appendTLV(this, SECURITY_DOMAIN_PARAMS_TAG, secDomainAdminSessionParams);
+                        }
+                    }.toByteArray();
+                    Utils.BER.appendTLV(this, ADMIN_SESSION_TRIGGER_PARAMS_TAG,securityDomainParameterValues);
+                }
+            }.toByteArray();
+
+            return triggerParams;
         }
 
     }

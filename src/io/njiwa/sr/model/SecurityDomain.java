@@ -1,14 +1,14 @@
 /*
  * Njiwa Open Source Embedded M2M UICC Remote Subscription Manager
- * 
- * 
+ *
+ *
  * Copyright (C) 2019 - , Digital Solutions Ltd. - http://www.dsmagic.com
  *
  * Njiwa Dev <dev@njiwa.io>
- * 
+ *
  * This program is free software, distributed under the terms of
  * the GNU General Public License.
- */ 
+ */
 
 package io.njiwa.sr.model;
 
@@ -27,12 +27,8 @@ import java.util.List;
  * Created by bagyenda on 20/04/2016.
  */
 @Entity
-@Table(name = "securitydomains",
-        indexes = {
-        @Index(columnList = "eis_id", name = "sd_idx1"),
-        @Index(columnList = "eis_id,aid", name = "sd_idx2",unique = true),
-}
-)
+@Table(name = "securitydomains", indexes = {@Index(columnList = "eis_id", name = "sd_idx1"), @Index(columnList =
+        "eis_id,aid", name = "sd_idx2", unique = true),})
 @SequenceGenerator(name = "securitydomains", sequenceName = "securitydomains_seq", allocationSize = 1)
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "eis"})
 @DynamicUpdate
@@ -42,35 +38,27 @@ public class SecurityDomain {
     @javax.persistence.Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "securitydomains")
-    private
-    Long Id;
+    private Long Id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    private
-    Eis eis; // Map to EIS entry
+    private Eis eis; // Map to EIS entry
 
     @Column(nullable = false)
-    private
-    String aid;
+    private String aid;
 
     @Column(nullable = false)
-    private
-    String sin;
+    private String sin;
 
     @Column(nullable = false)
-    private
-    String sdin;
+    private String sdin;
 
     @Column(nullable = false)
-    private
-    Role role;
+    private Role role;
 
     @Column(nullable = true)
-    private
-    String TARs; // As comma-separated list
+    private String TARs; // As comma-separated list
     @OneToMany(mappedBy = "sd", cascade = CascadeType.ALL, orphanRemoval = true)
-    private
-    List<KeySet> keysets; //!< The keys in this thingie
+    private List<KeySet> keysets; //!< The keys in this thingie
 
     public SecurityDomain() {
     }
@@ -92,11 +80,9 @@ public class SecurityDomain {
             String xtar = Utils.HEX.b2H(TAR);
             for (SecurityDomain s : eis.getSdList()) {
                 for (String t : s.getTARsAsList())
-                    if (t.equalsIgnoreCase(xtar))
-                        return s;
-                    // Try by AID
-                if (Utils.tarFromAid(s.getAid()).equalsIgnoreCase(xtar))
-                    return s;
+                    if (t.equalsIgnoreCase(xtar)) return s;
+                // Try by AID
+                if (Utils.tarFromAid(s.getAid()).equalsIgnoreCase(xtar)) return s;
             }
         } catch (Exception ex) {
         }
@@ -161,10 +147,8 @@ public class SecurityDomain {
 
     public String[] getTARsAsList() {
         String t = getTARs();
-        if (t == null)
-            return new String[0];
-        else
-            return t.split(",");
+        if (t == null) return new String[0];
+        else return t.split(",");
     }
 
     public String firstTAR() {
@@ -196,7 +180,7 @@ public class SecurityDomain {
         return String.format("%s [%s]", xaid != null ? xaid : "n/a", xrole);
     }
 
-    public  Utils.Pair<KeyComponent,KeyComponent> findFirstSCP80KeyComponents() {
+    public Utils.Pair<KeyComponent, KeyComponent> findFirstSCP80KeyComponents() {
         for (KeySet ks : getKeysets())
             if (ks.getType() == KeySet.Type.SCP80) {
                 KeyComponent kic = null, kid = null;
@@ -209,6 +193,30 @@ public class SecurityDomain {
                     if (kic != null && kid != null) return new Utils.Pair<>(kic, kid);
                 }
             }
+        return null;
+    }
+
+    public KeyComponent findFirstSCP81Key() {
+
+        for (KeySet ks : getKeysets())
+            if (ks.getType() == KeySet.Type.SCP81) {
+                KeyComponent component;
+                for (Key key : ks.getKeys())
+                    if ((component = key.findSuitableKeycomponent(KeyComponent.suitableGPCAmmendBTypes)) != null)
+                        return component;
+            }
+        return null;
+    }
+
+    public KeyComponent findKeyComponent(KeySet.Type type, int version, int keyIdentifier,
+                                         KeyComponent.Type keyComponentType) {
+        KeyComponent component;
+        KeyComponent.Type[] types = new KeyComponent.Type[]{keyComponentType};
+        for (KeySet ks : getKeysets())
+            if (ks.getType() == type && ks.getVersion() == version) for (Key key : ks.getKeys())
+                if (key.getIndex() == keyIdentifier && (component = key.findSuitableKeycomponent(types)) != null)
+                    return component;
+
         return null;
     }
 

@@ -1,14 +1,14 @@
 /*
  * Njiwa Open Source Embedded M2M UICC Remote Subscription Manager
- * 
- * 
+ *
+ *
  * Copyright (C) 2019 - , Digital Solutions Ltd. - http://www.dsmagic.com
  *
  * Njiwa Dev <dev@njiwa.io>
- * 
+ *
  * This program is free software, distributed under the terms of
  * the GNU General Public License.
- */ 
+ */
 
 package io.njiwa.common.model;
 
@@ -26,12 +26,9 @@ import java.util.List;
  * Created by bagyenda on 20/04/2016.
  */
 @Entity
-@Table(name = "keys", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"idx", "keyset_id"}, // Index must be unique in keyset. Right?!
-                name = "key_idx_ct")
-}, indexes = {
-        @Index(columnList = "idx,keyset_id", name = "keys_idx1")
-})
+@Table(name = "keys", uniqueConstraints = {@UniqueConstraint(columnNames = {"idx", "keyset_id"}, // Index must be
+// unique in keyset. Right?!
+        name = "key_idx_ct")}, indexes = {@Index(columnList = "idx,keyset_id", name = "keys_idx1")})
 @SequenceGenerator(name = "keys", sequenceName = "keys_seq", allocationSize = 1)
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "keyset"})
 @DynamicUpdate
@@ -43,25 +40,20 @@ public class Key {
     @javax.persistence.Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "keys")
-    private
-    Long Id;
+    private Long Id;
 
     @Column(nullable = false, name = "idx")
-    private
-    Integer index;
+    private Integer index;
 
     @Column(name = "kcv", columnDefinition = "text")
-    private
-    String checkValue;
+    private String checkValue;
 
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    private
-    KeySet keyset;
+    private KeySet keyset;
 
-    @OneToMany(mappedBy = "key", cascade = CascadeType.ALL,orphanRemoval = true)
-    private
-    List<KeyComponent> keyComponents;
+    @OneToMany(mappedBy = "key", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<KeyComponent> keyComponents;
 
     public Key() {
     }
@@ -77,14 +69,14 @@ public class Key {
         setKeyComponents(keyComponents);
     }
 
-    public Key(int index, KeyComponent keyComponent)
-    {
+    public Key(int index, KeyComponent keyComponent) {
         setIndex(index);
         List<KeyComponent> kl = new ArrayList<>();
         kl.add(keyComponent);
         keyComponent.setKey(this); // Map back
         setKeyComponents(kl);
     }
+
     /**
      * Find a key value from the Eis based on:
      *
@@ -96,10 +88,7 @@ public class Key {
      * @throws Exception
      */
     public static Utils.Pair<Integer, byte[]> findKeyValue(SecurityDomain sd, KeySet.Type type, int idx,
-                                                           int
-                                                                   typeNibble, int keyIdentifier)
-            throws
-            Exception {
+                                                           int typeNibble, int keyIdentifier) {
 
         KeySet k = null;
 
@@ -110,14 +99,16 @@ public class Key {
                     break;
                 }
         } catch (Exception ex) {
-
         }
-
+        if (k == null)
+            return null;
+        KeyComponent.Type kt = null;
+        Key candidateKey = null;
         if (type == KeySet.Type.SCP80) {
             // Find first one
             for (Key key : k.getKeys())
                 if (key.getIndex() == keyIdentifier) { // Table A.1 of ETSI TS 102 225
-                    KeyComponent.Type kt;
+
                     switch (typeNibble) {
                         case 0x00:
                             kt = KeyComponent.Type.AES; // According to Sec 2.4.3 of SGP-02-3-0 AES in CBC mode is
@@ -137,16 +128,22 @@ public class Key {
                             kt = KeyComponent.Type.RFU;
                             break;
                     }
-                    return new Utils.Pair<>(key.getIndex(), key.findSuitableKeycomponent(new
-                            KeyComponent.Type[]{
-                            kt}).byteValue());
+                    candidateKey = key;
+                    break;
                 }
-            return null;
-        } else {// PSK TLS and others, get first one. XXX right?
-            Key key = k.getKeys().get(0);
-            return new Utils.Pair<>(key.getIndex(), key.getKeyComponents().get(0)
-                    .byteValue());
+        } else if (type == KeySet.Type.SCP81) {// PSK TLS and others, get first matching...
+            for (Key key : k.getKeys())
+                if (key.getIndex() == keyIdentifier) {
+                    candidateKey = key;
+                    kt = KeyComponent.Type.PSK_TLS;
+                    break;
+                }
         }
+
+        if (candidateKey != null)
+            return new Utils.Pair<>(candidateKey.getIndex(),
+                    candidateKey.findSuitableKeycomponent(new KeyComponent.Type[]{kt}).byteValue());
+        else return null;
     }
 
 
@@ -154,8 +151,7 @@ public class Key {
         try {
             for (KeyComponent kc : getKeyComponents())
                 for (KeyComponent.Type t : types)
-                    if (t == kc.getType())
-                        return kc;
+                    if (t == kc.getType()) return kc;
         } catch (Exception ex) {
         }
         return null;

@@ -614,7 +614,7 @@ public class Eis implements RpsElement {
 
             public int versionAsInt() {
                 try {
-                    return Integer.parseInt(version, 16);
+                    return Integer.parseInt(version, 10);
                 } catch (Exception ex) {
                 }
                 return 0;

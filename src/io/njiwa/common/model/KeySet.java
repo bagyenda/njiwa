@@ -110,7 +110,11 @@ public class KeySet {
 
     public KeySet(String version, Eis.SecurityDomain.KeySet.Type wsType, List<Certificate> certificates, List<Key>
             keys, long counter) {
-        this(Integer.parseInt(version, 16), Type.fromWsType(wsType), certificates, keys, counter);
+        this(Integer.parseInt(version, 10),
+                Type.fromWsType(wsType),
+                certificates,
+                keys,
+                counter);
     }
 
     public long bumpCounter(EntityManager em) throws Exception {

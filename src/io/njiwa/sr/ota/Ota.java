@@ -62,7 +62,7 @@ public class Ota {
     public static final short Script_Chaining_TAG = 0x83;
     public static final short Error_Action_Tag = 0x82;
     public static final short Command_Scripting_Template_Tag = 0xAA;
-    public static final short Response_Scripting_Template_Tag = 0xAB;
+    public static final short Response_Scripting_Template_Definite_Length_Tag = 0xAB;
     public static final short Command_Scripting_Template_for_Indefinite_Length_Tag = 0xAE;
     public static final short Response_Scripting_Template_for_Indefinite_Length_Tag = 0xAF;
     public static final short Number_of_Executed_C_APDUS_Tag = 0x80;
@@ -1266,7 +1266,7 @@ public class Ota {
                 int tag = data_in[0] & 0xFF;
                 boolean indefiniteCoding = (tag == Response_Scripting_Template_for_Indefinite_Length_Tag || tag
                         == Command_Scripting_Template_for_Indefinite_Length_Tag);
-                boolean isResp = (tag == Response_Scripting_Template_Tag || tag ==
+                boolean isResp = (tag == Response_Scripting_Template_Definite_Length_Tag || tag ==
                         Response_Scripting_Template_for_Indefinite_Length_Tag);
 
                 RemoteAPDUStructure r;
