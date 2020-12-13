@@ -1,18 +1,19 @@
 /*
  * Njiwa Open Source Embedded M2M UICC Remote Subscription Manager
- * 
- * 
+ *
+ *
  * Copyright (C) 2019 - , Digital Solutions Ltd. - http://www.dsmagic.com
  *
  * Njiwa Dev <dev@njiwa.io>
- * 
+ *
  * This program is free software, distributed under the terms of
  * the GNU General Public License.
- */ 
+ */
 
 package io.njiwa.dp.transactions;
 
 import io.njiwa.common.ECKeyAgreementEG;
+import io.njiwa.common.SDCommand;
 import io.njiwa.common.Utils;
 import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.model.TransactionType;
@@ -22,12 +23,11 @@ import io.njiwa.common.ws.types.BaseTransactionType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
 import io.njiwa.dp.Scp03;
 import io.njiwa.dp.model.Euicc;
+import io.njiwa.dp.model.ISDP;
 import io.njiwa.dp.model.ProfileTemplate;
 import io.njiwa.dp.model.SmDpTransaction;
-import io.njiwa.dp.ws.ES2Client;
-import io.njiwa.common.SDCommand;
-import io.njiwa.dp.model.ISDP;
 import io.njiwa.dp.pedefinitions.EUICCResponse;
+import io.njiwa.dp.ws.ES2Client;
 import io.njiwa.sr.ws.interfaces.ES3;
 import io.njiwa.sr.ws.types.*;
 
@@ -80,24 +80,20 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
     public DownloadProfileTransaction() {
     }
 
-    public DownloadProfileTransaction(EntityManager em, ProfileTemplate template,
-                                      Euicc euicc,
-                                      long smsrId, boolean
-                                              enable) throws
-            Exception {
+    public DownloadProfileTransaction(EntityManager em, ProfileTemplate template, Euicc euicc, long smsrId,
+                                      boolean enable) throws Exception {
         currentStage = Stage.CREATEISDP;
         enableProfile = enable;
         this.smsrId = smsrId;
 
         // Try and get profile data
         profileTLVs = template.performDataPreparation(em, euicc.getEid(), this);
-        if (profileTLVs == null)
-            throw new Exception("Invalid: Failed to prepare profile data");
+        if (profileTLVs == null) throw new Exception("Invalid: Failed to prepare profile data");
 
 
         try {
-            sdin = Utils.HEX.h2b(euicc.getEcasd_sdin());
-            sin = Utils.HEX.h2b(euicc.getEcasd_sin());
+            sdin = Utils.HEX.h2b(euicc.getIsdR_sdin());
+            sin = Utils.HEX.h2b(euicc.getIsdR_sin());
         } catch (Exception ex) {
             sdin = null;
             sin = null;
@@ -113,9 +109,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
     }
 
     private void setChannelAndReceiptKeys(byte[] dr) throws Exception {
-        byte[] keyData = ECKeyAgreementEG.computeKeyData(0x5C, dr, hostID, sdin, sin, ecasd_pubkey, ecasd_pubkey_paramRef,
-                eSK_DP_ECKA, 256
-        );
+        byte[] keyData = ECKeyAgreementEG.computeKeyData(0x5C, dr, hostID, sdin, sin, ecasd_pubkey,
+                ecasd_pubkey_paramRef, eSK_DP_ECKA, 256);
         // According to Table 3-29 of GPC Ammendment A, the receipt key gets first 16 bytes, and securee channel
         // base key next 16 bytes, so:
 
@@ -126,8 +121,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
     }
 
     @Override
-    protected synchronized void processResponse(EntityManager em, long tid, TransactionType.ResponseType responseType, String reqId,
-                                                byte[] response) {
+    protected synchronized void processResponse(EntityManager em, long tid, TransactionType.ResponseType responseType
+            , String reqId, byte[] response) {
         boolean hasError = false;
         String cmdType;
         SmDpTransaction trans = em.find(SmDpTransaction.class, tid);
@@ -154,9 +149,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                             new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
                                     "execution error"));
-                    ES2Client.sendDownloadProfileResponse(em, status,
-                            getReplyToAddress(em, "ES2"),
-                            originallyTo, requestingEntityId, response, relatesTO, startDate, iccid);
+                    ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                            requestingEntityId, response, relatesTO, startDate, iccid);
 
                 }
 
@@ -168,9 +162,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                             new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
                                     "execution error"));
-                    ES2Client.sendDownloadProfileResponse(em, status,
-                            getReplyToAddress(em, "ES2"),
-                            originallyTo, requestingEntityId,response, relatesTO, startDate, iccid);
+                    ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                            requestingEntityId, response, relatesTO, startDate, iccid);
                 } else try {
                     List<Utils.Pair<Integer, byte[]>> l = Utils.BER.decodeTLVs(response);
                     // Look over them. First non-success code means error, first one with data and TAG = 85 =
@@ -180,16 +173,14 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                         int sw1 = resp[resp.length - 2];
                         //   int sw2 = resp[resp.length-1];
 
-                        if (!SDCommand.APDU.isSuccessCode(sw1))
-                            hasError = true;
+                        if (!SDCommand.APDU.isSuccessCode(sw1)) hasError = true;
                         else if (resp.length > 2) {
                             // Get the challenge
                             byte[] xresp = new byte[resp.length - 2];
                             System.arraycopy(resp, 0, xresp, 0, xresp.length);
                             // Decode as TLV with tag = 85
                             Utils.Pair<Integer, byte[]> y = Utils.BER.decodeTLV(xresp);
-                            if (y.k == 0x85)
-                                randomChallenge = y.l; // Record randomChallenge
+                            if (y.k == 0x85) randomChallenge = y.l; // Record randomChallenge
                         }
                     }
                 } catch (Exception ex) {
@@ -199,9 +190,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                             new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
                                     "execution error"));
-                    ES2Client.sendDownloadProfileResponse(em, status,
-                            getReplyToAddress(em, "ES2"),
-                            originallyTo,requestingEntityId, response, relatesTO, startDate, iccid);
+                    ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                            requestingEntityId, response, relatesTO, startDate, iccid);
                 }
                 break;
             case ESTABLISHKEYSET_SEND_DP_ECKA:
@@ -210,9 +200,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                             new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
                                     "execution error"));
-                    ES2Client.sendDownloadProfileResponse(em, status,
-                            getReplyToAddress(em, "ES2"),
-                            originallyTo, requestingEntityId,response, relatesTO, startDate, iccid);
+                    ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                            requestingEntityId, response, relatesTO, startDate, iccid);
                 } else try {
                     byte[] DR = null;
                     byte[] receipt = null;
@@ -223,8 +212,7 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                         int sw1 = resp[resp.length - 2];
                         //   int sw2 = resp[resp.length-1];
 
-                        if (!SDCommand.APDU.isSuccessCode(sw1))
-                            hasError = true;
+                        if (!SDCommand.APDU.isSuccessCode(sw1)) hasError = true;
                         else if (resp.length > 2) {
                             // Get the challenge
                             byte[] xresp = new byte[resp.length - 2];
@@ -234,10 +222,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                             while (in.available() > 0) {
                                 Utils.Pair<InputStream, Integer> y = Utils.BER.decodeTLV(in);
                                 byte[] xdata = Utils.getBytes(y.k);
-                                if (y.l == 0x85)
-                                    DR = xdata; // Record DR
-                                else if (y.l == 0x86)
-                                    receipt = xdata;
+                                if (y.l == 0x85) DR = xdata; // Record DR
+                                else if (y.l == 0x86) receipt = xdata;
                             }
                         }
                     }
@@ -245,23 +231,19 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                         status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                                 new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
                                         "execution error"));
-                        ES2Client.sendDownloadProfileResponse(em, status,
-                                getReplyToAddress(em, "ES2"),
-                                originallyTo,requestingEntityId, response, relatesTO, startDate, iccid);
+                        ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                                requestingEntityId, response, relatesTO, startDate, iccid);
                     } else {
                         setChannelAndReceiptKeys(DR);
-                        byte[] xreceipt = ECKeyAgreementEG. computeReceipt(DR,sdin,hostID,SCP03_KEY_ID,
-                                SCP03_KEY_VERSION,ECKeyAgreementEG.INCLUDE_DERIVATION_RANDOM|ECKeyAgreementEG
-                                        .CERTIFICATE_VERIFICATION_PRECEDES,
-                                receiptKey); // Check
+                        byte[] xreceipt = ECKeyAgreementEG.computeReceipt(DR, sdin, hostID, SCP03_KEY_ID,
+                                SCP03_KEY_VERSION,
+                                ECKeyAgreementEG.INCLUDE_DERIVATION_RANDOM | ECKeyAgreementEG.CERTIFICATE_VERIFICATION_PRECEDES, receiptKey); // Check
                         // receipt
                         if (!Arrays.equals(xreceipt, receipt)) {
-                            status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
-                                    new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
-                                            "execution error"));
-                            ES2Client.sendDownloadProfileResponse(em, status,
-                                    getReplyToAddress(em, "ES2"),
-                                    originallyTo, requestingEntityId,response, relatesTO, startDate, iccid);
+                            status =
+                                    new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error", "execution error"));
+                            ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"),
+                                    originallyTo, requestingEntityId, response, relatesTO, startDate, iccid);
                             hasError = true;
                         }
                     }
@@ -275,9 +257,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                             new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
                                     "execution error"));
-                    ES2Client.sendDownloadProfileResponse(em, status,
-                            getReplyToAddress(em, "ES2"),
-                            originallyTo,requestingEntityId, response, relatesTO, startDate, iccid);
+                    ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                            requestingEntityId, response, relatesTO, startDate, iccid);
                 } else try {
                     // Handle response, one by one
                     ByteArrayInputStream xin = new ByteArrayInputStream(response);
@@ -290,12 +271,10 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
 
                         if (xtag == 0x9F) {
                             // We have an error!
-                            status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
-                                    new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
-                                            "execution error"));
-                            ES2Client.sendDownloadProfileResponse(em, status,
-                                    getReplyToAddress(em, "ES2"),
-                                    originallyTo,requestingEntityId, response, relatesTO, startDate, iccid);
+                            status =
+                                    new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error", "execution error"));
+                            ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"),
+                                    originallyTo, requestingEntityId, response, relatesTO, startDate, iccid);
 
                             hasError = true;
                             break;
@@ -314,17 +293,15 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                             String xs = "", sep = "";
                             // Process Profile TLV command responses
                             ByteArrayInputStream derInput = new ByteArrayInputStream(resp);
-                            while (derInput.available() > 0)
-                                try {
-                                    EUICCResponse euiccResponse = new EUICCResponse();
-                                    euiccResponse.decode(derInput, true); // XXX assume implicit coding. Right?
-                                    Utils.Pair<Boolean, String> pRes = ProfileTemplate.processEuiccResponse
-                                            (euiccResponse);
-                                    hasError |= pRes.k; // Has errors if one has errors
-                                    xs += sep + pRes.l;
-                                    sep = "; ";
-                                } catch (Exception ex) {
-                                }
+                            while (derInput.available() > 0) try {
+                                EUICCResponse euiccResponse = new EUICCResponse();
+                                euiccResponse.decode(derInput, true); // XXX assume implicit coding. Right?
+                                Utils.Pair<Boolean, String> pRes = ProfileTemplate.processEuiccResponse(euiccResponse);
+                                hasError |= pRes.k; // Has errors if one has errors
+                                xs += sep + pRes.l;
+                                sep = "; ";
+                            } catch (Exception ex) {
+                            }
                             try {
                                 // Record parsed response
                                 trans.recordResponse(em, "DownloadAndInstallProfile", xs, !hasError);
@@ -333,28 +310,24 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                         }
 
                     }
-                    if (session != null)
-                        scp03Sessions.addLast(session.copyOf()); // Put back what we got last. Right?
+                    if (session != null) scp03Sessions.addLast(session.copyOf()); // Put back what we got last. Right?
                     if (hasError) {
                         status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                                 new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
                                         "execution error"));
-                        ES2Client.sendDownloadProfileResponse(em, status,
-                                getReplyToAddress(em, "ES2"),
-                                originallyTo,requestingEntityId, response, relatesTO, startDate, iccid);
+                        ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                                requestingEntityId, response, relatesTO, startDate, iccid);
                     } else {
                         ISDP isdp = trans.getIsdp();
                         isdp.setState(ISDP.State.Disabled); // Installed but not enabled.
                         if (!enableProfile)
-                            status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus
-                                    .Status.ExecutedSuccess);
-                        else
-                            status = null;
+                            status =
+                                    new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess);
+                        else status = null;
                     }
                     if (status != null) // All done. Send MNO a response
-                        ES2Client.sendDownloadProfileResponse(em, status,
-                                getReplyToAddress(em, "ES2"),
-                                originallyTo, requestingEntityId,response, relatesTO, startDate, iccid);
+                        ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                                requestingEntityId, response, relatesTO, startDate, iccid);
                 } catch (Exception ex) {
                     Utils.lg.severe("Error handling downloadProfile response: " + ex.getMessage());
                 }
@@ -384,12 +357,11 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     // Mark it enabled
                     ISDP isdp = trans.getIsdp();
                     isdp.setState(ISDP.State.Enabled);
-                    status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status
-                            .ExecutedSuccess);
+                    status =
+                            new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess);
                 }
-                ES2Client.sendDownloadProfileResponse(em, status,
-                        getReplyToAddress(em, "ES2"),
-                        originallyTo,requestingEntityId, response, relatesTO, startDate, iccid); // Always inform MNO
+                ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
+                        requestingEntityId, response, relatesTO, startDate, iccid); // Always inform MNO
                 break;
             default:
                 cmdType = currentStage.name();
@@ -399,8 +371,7 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
         if (responseType == TransactionType.ResponseType.SUCCESS && !hasError) {
             // go to next status
             currentStage = currentStage.next();
-        } else
-            currentStage = Stage.ERROR;
+        } else currentStage = Stage.ERROR;
 
         if (currentStage == Stage.ERROR) {
             SmDpTransaction tr = em.find(SmDpTransaction.class, tid);
@@ -425,30 +396,26 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
 
     private boolean doSendData(EntityManager em, byte[] data, SmDpTransaction trans) {
         try {
-             RpaEntity smsr = em.find(RpaEntity.class, smsrId);
+            RpaEntity smsr;
+            smsr = smsrId == RpaEntity.LOCAL_ENTITY_ID ? RpaEntity.getlocalSMSR() :  em.find(RpaEntity.class, smsrId);
 
-            final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
+            final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
             final String toAddress = rcptTo.makeAddress();
-            final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                    rcptTo, ES3.class,
-                    RpaEntity.Type.SMDP, em,requestingEntityId);
-            WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP),"ES3");
-            final Holder<String> msgType = new Holder<String>("http://gsma" +
-                    ".com/ES3/ProfileManagement/ES3-CreateISDP");
+            final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port", rcptTo,
+                    ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
+            WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP), "ES3");
+            final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
+                    "-CreateISDP");
             String msgID = trans.newRequestMessageID(); // Create new one.
             String aid = trans.getIsdp().getAid(); // Get AID
             SendDataResponse resp = proxy.sendData(sender, toAddress, null, msgID, msgType, msgID,
-                    TransactionType.DEFAULT_VALIDITY_PERIOD, eid, aid,
-                    Utils
-                            .HEX.b2H(data), true, null);
-            if (resp != null &&
-                    resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
+                    TransactionType.DEFAULT_VALIDITY_PERIOD, eid, aid, Utils.HEX.b2H(data), true, null);
+            if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                 throw new Exception("Execution failed: " + resp);
         } catch (WSUtils.SuppressClientWSRequest wsa) {
             return false;
         } catch (Exception ex) {
-            Utils.lg.severe("Failed to issue sendData  call: " + ex.getMessage
-                    ());
+            Utils.lg.severe("Failed to issue sendData  call: " + ex.getMessage());
         }
         return false;
     }
@@ -462,26 +429,24 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
             case CREATEISDP:
 
                 try {
-                     RpaEntity smsr = em.find(RpaEntity.class, smsrId);
+                    RpaEntity smsr = em.find(RpaEntity.class, smsrId);
 
-                    final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
+                    final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
                     final String toAddress = rcptTo.makeAddress();
                     final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                            rcptTo, ES3.class,
-                            RpaEntity.Type.SMDP, em,requestingEntityId);
+                            rcptTo, ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
                     WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP),
                             "ES3");
-                    final Holder<String> msgType = new Holder<String>("http://gsma" +
-                            ".com/ES3/ProfileManagement/ES3-CreateISDP");
+                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
+                            "-CreateISDP");
                     String msgID = trans.newRequestMessageID(); // Create new one.
                     ProfileTemplate profileTemplate = isdp.getProfileTemplate();
                     String mnoOID = isdp.getMno_oid();
                     em.flush(); // XXX Right?
                     CreateISDPResponse resp = proxy.createISDP(sender, toAddress, null, msgID, msgType, msgID,
-                            TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc()
-                                    .getEid(), isdp.getIccid(), mnoOID, profileTemplate.getRequiredMemory(), true, null);
-                    if (resp != null &&
-                            resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
+                            TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), isdp.getIccid(),
+                            mnoOID, profileTemplate.getRequiredMemory(), true, null);
+                    if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                         throw new Exception("Execution failed: " + resp);
                     return true;
                 } catch (WSUtils.SuppressClientWSRequest wsa) {
@@ -496,10 +461,10 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                 RpaEntity smdp = RpaEntity.getLocal(RpaEntity.Type.SMDP);
 
 
-                final SDCommand.APDU store_data_p = ECKeyAgreementEG.isdKeySetEstablishmentSendCert(smdp
-                                .secureMessagingCert(),
-                        ECKeyAgreementEG.SM_DP_CERTIFICATE_TYPE,
-                        smdp.getAdditionalDiscretionaryData(), smdp.getSignature());
+                final SDCommand.APDU store_data_p =
+                        ECKeyAgreementEG.isdKeySetEstablishmentSendCert(smdp.secureMessagingCert(),
+                                ECKeyAgreementEG.SM_DP_CERTIFICATE_TYPE, smdp.getAdditionalDiscretionaryData(),
+                                smdp.getSignature());
                 // Make data
                 ByteArrayOutputStream os = new ByteArrayOutputStream() {
                     {
@@ -518,15 +483,16 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                 ePK_DP_ECKA = Utils.ECC.encode((ECPublicKey) kp.getPublic());
                 eSK_DP_ECKA = Utils.ECC.encode((ECPrivateKey) kp.getPrivate());
                 byte[] a6 = ECKeyAgreementEG.makeA6CRT(1, sdin, hostID, SCP03_KEY_ID, SCP03_KEY_VERSION,
-                        ECKeyAgreementEG.INCLUDE_DERIVATION_RANDOM|ECKeyAgreementEG.CERTIFICATE_VERIFICATION_PRECEDES);
-                final SDCommand apdu = ECKeyAgreementEG.isdKeySetEstablishmentSendKeyParams(randomChallenge, kp,
-                        a6,ecasd_pubkey_paramRef);
+                        ECKeyAgreementEG.INCLUDE_DERIVATION_RANDOM | ECKeyAgreementEG.CERTIFICATE_VERIFICATION_PRECEDES);
+                final SDCommand apdu = ECKeyAgreementEG.isdKeySetEstablishmentSendKeyParams(randomChallenge, kp, a6,
+                        ecasd_pubkey_paramRef);
                 try {
                     return doSendData(em, apdu.toByteArray(), trans);
                 } catch (Exception ex) {
                     return false;
                 }
             case DOWNLOADPROFILE:
+                int end = -1;
                 // First look for a session
                 Scp03.Session session = scp03Sessions.pollFirst();
                 if (session == null || session.state == Scp03.Session.State.DEAD)
@@ -538,18 +504,20 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                 if (session.state != Scp03.Session.State.AUTHENTICATED) {
                     l.add(session.scp03Command());
                     scp03Sessions.addLast(session.copyOf()); // Store session
-                } else {
-                    // Break up the profile TLVs, send them, save the sub-sessions since they have the saved info
-                    InputStream in = new ByteArrayInputStream(profileTLVs);
-                    while (in.available() > 0) {
-                        int dlen = Math.min(in.available(), MAXIMUM_PROFILE_SEGMENT_LENGTH);
-                        byte[] pData = new byte[dlen];
-                        in.read(pData);
-                        SDCommand c = session.scp03Command(SDCommand.SCP03tCommand.ProfileElement
-                                (pData));
+                } else try {
+                    // Send all profile TLVs, let SMS-SR handle split. Sec 5.4.4 of SGP 02 v4.1 says SM-SR should
+                    //worry about splitting
+                    // save the sub-sessions since they have the saved info
+                    int i = offset;
+                    while ((end = Math.min(i + MAXIMUM_PROFILE_SEGMENT_LENGTH, profileTLVs.length)) < profileTLVs.length) {
+                        byte[] pData = Arrays.copyOfRange(profileTLVs, i, end);
+                        SDCommand c = session.scp03Command(SDCommand.SCP03tCommand.ProfileElement(pData));
                         l.add(c);
-                        scp03Sessions.addLast(session.copyOf());
+                        i = end;
                     }
+                    scp03Sessions.addLast(session.copyOf());
+                } catch (Exception ex) {
+                    String xs = ex.getMessage();
                 }
                 try {
                     // Send the data
@@ -560,7 +528,7 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                         }
                     }.toByteArray();
                     boolean res = doSendData(em, xdata, trans);
-                    offset = profileTLVs.length; // End of. Right?
+                    if (end >= 0 && res) offset = end;
                     return res;
                 } catch (Exception ex) {
                 }
@@ -569,33 +537,29 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                 try {
                     final RpaEntity smsr = em.find(RpaEntity.class, smsrId);
 
-                    final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
+                    final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
                     final String toAddress = rcptTo.makeAddress();
                     final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                            rcptTo, ES3.class,
-                            RpaEntity.Type.SMDP, em,requestingEntityId);
+                            rcptTo, ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
                     WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP),
                             "ES3");
-                    final Holder<String> msgType = new Holder<String>("http://gsma" +
-                            ".com/ES3/ProfileManagement/ES3-ProfileDownloadCompletedRequest");
+                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
+                            "-ProfileDownloadCompletedRequest");
                     String iccid = isdp.getIccid();
                     ProfileTemplate profileTemplate = isdp.getProfileTemplate();
                     String profType = profileTemplate.getType();
                     SubscriptionAddress address = new SubscriptionAddress();
-                    String msgID = trans
-                            .newRequestMessageID();
+                    String msgID = trans.newRequestMessageID();
                     address.imsi = this.imsi;
                     address.msisdn = this.msisdn;
-                    BaseResponseType resp = proxy.profileDownloadCompleted(sender, toAddress, null,
-                            msgID, msgType, msgID, TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(),
-                            iccid, profType, address, pol2);
-                    boolean isSuccess = (resp != null &&
-                            resp.functionExecutionStatus.status == BaseResponseType.ExecutionStatus.Status
-                                    .ExecutedSuccess);
+                    BaseResponseType resp = proxy.profileDownloadCompleted(sender, toAddress, null, msgID, msgType,
+                            msgID, TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, profType
+                            , address, pol2);
+                    boolean isSuccess =
+                            (resp != null && resp.functionExecutionStatus.status == BaseResponseType.ExecutionStatus.Status.ExecutedSuccess);
 
                     trans.recordResponse(em, "ProfiledownloadComplete", resp.toString(), isSuccess);
-                    if (!isSuccess)
-                        throw new Exception("Execution failed: " + resp);
+                    if (!isSuccess) throw new Exception("Execution failed: " + resp);
                     currentStage = Stage.ENABLEPROFILE; // Skip to next
                     return true;
                 } catch (Exception ex) {
@@ -609,24 +573,19 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     try {
                         final RpaEntity smsr = em.find(RpaEntity.class, smsrId);
 
-                        final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
+                        final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
                         final String toAddress = rcptTo.makeAddress();
                         final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                                rcptTo, ES3.class,
-                                RpaEntity.Type.SMDP, em,requestingEntityId);
-                        WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type
-                                .SMDP),
-                                "ES3");
-                        final Holder<String> msgType = new Holder<String>("http://gsma" +
-                                ".com/ES3/ProfileManagement/ES3-EnableISDP");
+                                rcptTo, ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
+                        WsaEndPointReference sender =
+                                new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP), "ES3");
+                        final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement" +
+                                "/ES3-EnableISDP");
                         String msgID = trans.newRequestMessageID(); // Create new one.
                         String iccid = isdp.getIccid();
                         EnableProfileResponse resp = proxy.enableProfile(sender, toAddress, null, msgID, msgType,
-                                msgID,
-                                TransactionType.DEFAULT_VALIDITY_PERIOD,
-                                isdp.getEuicc().getEid(), iccid, null);
-                        if (resp != null &&
-                                resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
+                                msgID, TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, null);
+                        if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                             throw new Exception("Execution failed: " + resp);
                         return true;
                     } catch (WSUtils.SuppressClientWSRequest wsa) {
@@ -654,18 +613,17 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
     }
 
     public enum Stage {
-        CREATEISDP, ESTABLISHKEYSET_SEND_CERT_DP_ECDSA, ESTABLISHKEYSET_SEND_DP_ECKA,
-        DOWNLOADPROFILE, PROFILEDOWNLOADCOMPLETE, ENABLEPROFILE, COMPLETE, ERROR;
+        CREATEISDP, ESTABLISHKEYSET_SEND_CERT_DP_ECDSA, ESTABLISHKEYSET_SEND_DP_ECKA, DOWNLOADPROFILE,
+        PROFILEDOWNLOADCOMPLETE, ENABLEPROFILE, COMPLETE, ERROR;
 
         private static Stage[] vals = values();
 
         public Stage next() {
-            if (this == COMPLETE)
-                return COMPLETE;
-            else if (this == ERROR)
-                return ERROR;
+            if (this == COMPLETE) return COMPLETE;
+            else if (this == ERROR) return ERROR;
             else
-                // From: http://stackoverflow.com/questions/17006239/whats-the-best-way-to-implement-next-and-previous-on-an-enum-type
+                // From: http://stackoverflow.com/questions/17006239/whats-the-best-way-to-implement-next-and
+                //-previous-on-an-enum-type
                 return vals[(this.ordinal() + 1) % vals.length];
         }
     }

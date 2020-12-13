@@ -684,6 +684,26 @@ public class Utils {
         return 0;
     }
 
+    public static String byteSwap(String in)
+    {
+        StringBuilder out = new StringBuilder();
+
+        for (int i = 0; i<in.length(); i+=2)
+        try {
+            out.append(in.charAt(i+1));
+            out.append(in.charAt(i));
+        } catch (Exception ex) {}
+        return out.toString();
+    }
+    public static String iccidFromBytes(String in)
+    {
+        String out = byteSwap(in);
+        // Remove last byte.
+        if (out.length() > 0)
+            out = out.substring(0,out.length()-1);
+        return out;
+    }
+
     public static boolean toBool(Object o) {
         try {
             if (o instanceof Boolean) return (Boolean) o;
@@ -898,7 +918,7 @@ public class Utils {
 
             return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(cert));
         } catch (Exception ex) {
-
+            String xs = ex.getMessage();
         }
         return null;
     }
@@ -1993,7 +2013,7 @@ public class Utils {
 
     /**
      * @brief This class is a helper for parsing HTTP Messages (requests and response). We need it because
-     * the Smartcard Webserver makes a RAW request after a PSK-TLS handshake -- No clean way to hand that off to the
+     * the euicc makes a RAW request after a PSK-TLS handshake -- No clean way to hand that off to the
      * JBOSS JAX APIs as far as we know, so best we parse ourselves
      */
     public static class Http {
@@ -2035,9 +2055,9 @@ public class Utils {
          * @brief This represents a standard MIME/HTTP Message type
          */
         private static abstract class Message {
-            private static final boolean USE_CHUNKED_IN_OUTPUT = false;
+            private static final boolean USE_CHUNKED_IN_OUTPUT = true; //!< Spec says we must use chunked response format
             public byte[] body = null; //!< The message body
-            public Map<String, String> headers = new HashMap<String, String>(); //!< The message headers
+            public Map<String, String> headers = new HashMap<>(); //!< The message headers
             public double version = 1.0; //!< The HTTP Version
             public boolean keepAlive = false; //!< Whether keep-alive is in use
 

@@ -116,16 +116,26 @@ public class ProfileTemplate {
     public ProfileTemplate() {
     }
 
-    public ProfileTemplate(RpaEntity mno, List<ProfileElement> profileElements) throws Exception {
+    public ProfileTemplate(RpaEntity mno, List<ProfileElement> profileElements, DataSourceType sourceType) throws Exception {
         // Profile header must be first element according to Sec 8.2 of eUICC Profile Package SimAlliance Doc
         ProfileHeader pHeader = profileElements.get(0).getHeader();
 
-        setIccid(Utils.HEX.b2H(pHeader.getIccid().value));
-        setType(pHeader.getProfileType().toString());
+        try {
+            String in = pHeader.getIccid().toString();
+            String iccid = Utils.iccidFromBytes(in);
+            setIccid(iccid);
+        } catch (Exception ex) {
+
+        }
+        try {
+            setType(pHeader.getProfileType().toString());
+        } catch (Exception ex) {}
+
         setMajor_version((int) pHeader.getMajorVersion().value);
         setMinor_version((int) pHeader.getMinorVersion().value);
         setMno(mno);
         setDerData(toBytes(profileElements));
+        setSourceType(sourceType);
     }
 
     /**
@@ -913,7 +923,7 @@ public class ProfileTemplate {
             if (pe.getPukCodes() != null && pe.getPukCodes().getPukCodes() != null) {
                 PEPUKCodes.PukCodes p = pe.getPukCodes().getPukCodes();
                 List<PUKConfiguration> pl = p != null ? p.getPUKConfiguration() : new
-                        ArrayList<PUKConfiguration>();
+                        ArrayList<>();
                 for (PUKConfiguration puk : pl)
                     if (puk.getPukValue() != null)
                         patchString(puk.getPukValue(), pinListData);

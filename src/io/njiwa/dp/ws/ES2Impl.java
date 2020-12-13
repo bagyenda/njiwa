@@ -156,65 +156,57 @@ public class ES2Impl {
     }
 
     private Euicc findOrFetchEIS(final RpaEntity smsr, final String eid, final boolean forceGetEIS) {
-        return po.doTransaction(new PersistenceUtility.Runner<Euicc>() {
-            @Override
-            public Euicc run(PersistenceUtility po, EntityManager em) throws Exception {
-                Euicc xeuicc = Euicc.findByEID(em, eid);
-                // Extract ECASD: CERT.ECASD.ECKA, extract SIN and SDIN. We need it for key establishment
-                Eis eis;
-                if (xeuicc == null || forceGetEIS) {
-                    eis = ES2Client.getEIS(po, smsr, eid);
+        Euicc xeuicc = po.doTransaction((po, em) -> Euicc.findByEID(em, eid));
+        Eis eis = xeuicc  != null ? xeuicc.eis : null;
 
-                    if (eis != null && xeuicc == null) {
-                        // Make a new one and save it.
-                        final Eis.SecurityDomain ecasd = eis.signedInfo.ecasd;
-                        final String sin = ecasd.sin;
-                        final String sdin = ecasd.sdin;
-                        byte[] ecasd_pKey = null;
-                        int ecasd_pref = 0;
-                        // Find ecasd pub key and key param
-                        try {
+        if (xeuicc == null || forceGetEIS) {
+            eis = ES2Client.getEIS(po, smsr, eid);
+            if (eis != null && xeuicc == null) {
+                // Make a new one and save it.
+                final Eis.SecurityDomain ecasd = eis.signedInfo.ecasd;
 
-                            for (Eis.SecurityDomain.KeySet k : ecasd.keySets)
-                                if (k.type == Eis.SecurityDomain.KeySet.Type.CA) {
+                byte[] ecasd_pKey = null;
+                int ecasd_pref = 0;
+                // Find ecasd pub key and key param
+                try {
 
-                                    // Go over the keysets, look for the one we want
-                                    try {
-                                        for (Eis.SecurityDomain.KeySet.Certificate c : k.certificates) {
-                                            Certificate.Data d = Certificate.Data.decode(c.value);
-                                            if (d.keyUsage == d.KEYAGREEMENT) {
-                                                ecasd_pKey = d.publicKeyQ;
-                                                ecasd_pref = d.publicKeyReferenceParam;
-                                                break;
-                                            }
-                                        }
-                                    } catch (Exception ex) {
+                    for (Eis.SecurityDomain.KeySet k : ecasd.keySets)
+                        if (k.type == Eis.SecurityDomain.KeySet.Type.CA) {
+
+                            // Go over the keysets, look for the one we want
+                            try {
+                                for (Eis.SecurityDomain.KeySet.Certificate c : k.certificates) {
+                                    Certificate.Data d = Certificate.Data.decode(c.value);
+                                    if (d.keyUsage == d.KEYAGREEMENT) {
+                                        ecasd_pKey = d.publicKeyQ;
+                                        ecasd_pref = d.publicKeyReferenceParam;
+                                        break;
                                     }
-                                    break;
                                 }
-                        } catch (Exception ex) {
+                            } catch (Exception ex) {
+                            }
+                            break;
                         }
-                        xeuicc = new Euicc(eid, smsr.getOid(), new ArrayList<ISDP>());
-                        xeuicc.setEcasd_public_key_param_ref(ecasd_pref);
-                        xeuicc.setEcasd_public_key_q(ecasd_pKey);
-                        xeuicc.setEcasd_sin(sin);
-                        xeuicc.setEcasd_sdin(sdin); // Store them for future reference
+                } catch (Exception ex) {
+                }
+                xeuicc = new Euicc(eid, smsr.getOid(), new ArrayList<ISDP>());
+                xeuicc.setEcasd_public_key_param_ref(ecasd_pref);
+                xeuicc.setEcasd_public_key_q(ecasd_pKey);
+                // Store them for future reference
+                xeuicc.setIsdR_sdin(eis.isdR.sdin);
+                xeuicc.setIsdR_sin(eis.isdR.sin);
 
-                        em.persist(xeuicc); // Store to DB
-                    }
-                } else
-                    eis = null;
-                if (xeuicc != null)
-                    xeuicc.eis = eis;
-
-                return xeuicc;
-            }
-
-            @Override
-            public void cleanup(boolean success) {
+                final Euicc xeuicc1 = xeuicc;
+                // Store to db.
+                po.doTransaction((po,em) -> {em.persist(xeuicc1); return true;});
 
             }
-        });
+        }
+
+        if (xeuicc != null)
+            xeuicc.eis = eis;
+
+        return xeuicc;
     }
 
     @WebMethod(operationName = "DownloadProfile")
@@ -378,10 +370,6 @@ public class ES2Impl {
                 return tr;
             }
 
-            @Override
-            public void cleanup(boolean success) {
-
-            }
         });
 
         if (trObj == null)

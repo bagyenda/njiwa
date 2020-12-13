@@ -75,9 +75,13 @@ public class ServerConfigurations {
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }
-        ServerConfigurations v = new ServerConfigurations();
-        v.setName(key);
-        v.setValue(value);
-        em.persist(v);
+        try {
+            ServerConfigurations v = new ServerConfigurations();
+            v.setName(key);
+            v.setValue(value);
+            em.persist(v);
+        } catch (Exception ex) {
+            String xs = ex.getMessage();
+        }
     }
 }

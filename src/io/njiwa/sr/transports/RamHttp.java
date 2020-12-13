@@ -16,7 +16,6 @@ import io.njiwa.common.PersistenceUtility;
 import io.njiwa.common.ServerSettings;
 import io.njiwa.common.StatsCollector;
 import io.njiwa.common.Utils;
-import io.njiwa.common.model.Key;
 import io.njiwa.common.model.KeyComponent;
 import io.njiwa.common.model.KeySet;
 import io.njiwa.common.model.TransactionType;
@@ -804,12 +803,17 @@ public class RamHttp extends Transport {
                     Utils.Http.Response response;
                     boolean closeConn = (reqs == maxReqs);
                     String xAdminFrom = req.headers.get("X-Admin-From");
+                    String xResponseStatus = req.headers.get("X-Admin-Script-Status");
                     Object msgData = req.cgiParams.get("msg");
                     boolean hasMsgData = (msgData != null) && (msgData instanceof String); // Sec 3.15.2
                     // notification via HTTPS: It is hex-coded as per spec
                     byte[] inputData = hasMsgData ? Utils.HEX.h2b((String) msgData) : req.body;
 
-                    if (hasMsgData || req.uriVerb.equalsIgnoreCase(RamHttp.DISPATCHER_RESULT_URI)) {
+                    if (hasMsgData || req.uriVerb.equalsIgnoreCase(RamHttp.DISPATCHER_RESULT_URI) || xResponseStatus != null) {
+                        Utils.lg.info(String.format("Incoming HTTP request, x-script-status: %s, xfrom: %s, body: %s",
+                                xResponseStatus != null ? xResponseStatus : "",
+                                xAdminFrom != null ? xAdminFrom : "",
+                                msgData));
                         StatsCollector.recordTransportEvent(TransportType.RAMHTTP, PacketType.MO); // Record
                         // incoming stat
                         response = processResponse(em, euicc, tid, inputData, closeConn);

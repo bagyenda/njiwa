@@ -19,6 +19,7 @@ import io.njiwa.common.rest.types.ReportsInputOrderData;
 import io.njiwa.dp.model.ProfileTemplate;
 import io.njiwa.dp.pedefinitions.EUICCResponse;
 import io.njiwa.dp.pedefinitions.ProfileElement;
+import io.njiwa.dp.pedefinitions.ProfileHeader;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.transports.Transport;
 import org.bouncycastle.util.io.pem.PemObject;
@@ -46,6 +47,7 @@ public class Test {
 
     @Inject
     PersistenceUtility po;
+
 
 
     /**
@@ -153,7 +155,15 @@ public class Test {
         f.read(b);
         f.close();
 
-        List<ProfileElement> pl = ProfileTemplate.fromBytes(b);
+        final List<ProfileElement> pl = ProfileTemplate.fromBytes(b);
+
+       po.doTransaction((po,em) -> {
+           RpaEntity mno = RpaEntity.getByUserId(em,"mno1");
+           ProfileTemplate profileTemplate = new ProfileTemplate(mno,pl, ProfileTemplate.DataSourceType.Database);
+
+           em.persist(profileTemplate);
+           return false;
+       });
 
         return pl;
     }
@@ -215,7 +225,7 @@ public class Test {
 
         try {
 
-            testPP();
+           // testPP();
 
             // readKeys("/tmp/sm-sr.pem");
             //      bootstrapKeysDB();
@@ -224,7 +234,7 @@ public class Test {
 
             //  outputKeyCerts();
 
-            //   testReadPT();
+            // testReadPT();
 
         //    javax.crypto.Mac mac = javax.crypto.Mac.getInstance("DES", ServerSettings.Constants.jcaProvider);
          //       mac = javax.crypto.Mac.getInstance("AESCMAC", ServerSettings.Constants.jcaProvider);

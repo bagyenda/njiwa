@@ -56,12 +56,13 @@ public class Euicc {
     @Column
     private
     Integer ecasd_public_key_param_ref;
+
     @Column
-    private
-    String ecasd_sin;
+    private String isdR_sin;
+
     @Column
-    private
-    String ecasd_sdin;
+    private String isdR_sdin;
+
     @OneToMany(mappedBy = "euicc", cascade = CascadeType.ALL,orphanRemoval = true)
     private
     List<ISDP> isdps;
@@ -148,19 +149,19 @@ public class Euicc {
         this.ecasd_public_key_param_ref = ecasd_public_key_param_ref;
     }
 
-    public String getEcasd_sin() {
-        return ecasd_sin;
+    public String getIsdR_sin() {
+        return isdR_sin;
     }
 
-    public void setEcasd_sin(String ecasd_sin) {
-        this.ecasd_sin = ecasd_sin;
+    public void setIsdR_sin(String isdR_sin) {
+        this.isdR_sin = isdR_sin;
     }
 
-    public String getEcasd_sdin() {
-        return ecasd_sdin;
+    public String getIsdR_sdin() {
+        return isdR_sdin;
     }
 
-    public void setEcasd_sdin(String ecasd_sdin) {
-        this.ecasd_sdin = ecasd_sdin;
+    public void setIsdR_sdin(String isdR_sdin) {
+        this.isdR_sdin = isdR_sdin;
     }
 }

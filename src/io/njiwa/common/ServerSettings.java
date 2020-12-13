@@ -12,6 +12,7 @@
 
 package io.njiwa.common;
 
+import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.model.ServerConfigurations;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
@@ -101,7 +102,8 @@ public class ServerSettings {
     private static final String SERVER_ECDSA_SECRET_KEY_ALIAS = "private_key-alias";
     private static final String SERVER_ECDSA_CERTIFICATE_ALIAS = "certificate_key-alias";
 
-    private static final String SERVER_OID = "oid";
+    private static final String SM_SR_OID = "sm-sr-oid";
+    private static final String SM_DP_OID = "sm-dp-oid";
     private static final String CRL_X509_CONTENT = "ci_crl_content";
     private static final String ADDITIONAL_DISCRETIONARY_DATA_TLVS = "discretionary_data_tlvs";
     private static final String SIGNED_SM_DP_DATA = "signed-sm-dp-data";
@@ -231,7 +233,8 @@ public class ServerSettings {
             put(CRL_X509_CONTENT, new BaseValidator(""));
             put(SERVER_ECDSA_CERTIFICATE_ALIAS, new BaseValidator("server-ecda-certificate"));
             put(SERVER_ECDSA_SECRET_KEY_ALIAS, new BaseValidator("server-pkey"));
-            put(SERVER_OID, new BaseValidator("1.2.3.4"));
+            put(SM_SR_OID, new BaseValidator("1.2.3.4"));
+            put(SM_DP_OID, new BaseValidator("1.2.3.5"));
             put(ADDITIONAL_DISCRETIONARY_DATA_TLVS, new TLVsValidator(""));
             put(SIGNED_SM_DP_DATA, new ByteArrayValidator("", true));
             put(SIGNED_SM_SR_DATA, new ByteArrayValidator("", true));
@@ -522,17 +525,22 @@ public class ServerSettings {
     }
 
 
-    public static String getOid() {
-        return (String) propertyValues.get(SERVER_OID);
+    public static String getOid(RpaEntity.Type type) {
+        return (String) propertyValues.get(
+                type == RpaEntity.Type.SMSR ?
+                SM_SR_OID : SM_DP_OID);
     }
 
 
 
-    public static void updateOid(EntityManager em, String oid) throws Exception {
+    public static void updateOid(EntityManager em,
+                                 RpaEntity.Type type,
+                                 String oid) throws Exception {
         String xoid = oid.trim();
         if (!Pattern.matches("^([1-9][0-9]{0,3}|0)([.]([1-9][0-9]{0,6}|0)){5,13}$", xoid))
             throw new Exception("Invalid OID");
-        updateProp(em, SERVER_OID, xoid);
+        updateProp(em, type == RpaEntity.Type.SMSR ?
+                SM_SR_OID : SM_DP_OID, xoid);
     }
 
     public static void updateBaseURL(EntityManager em, String baseUrl) throws Exception {
@@ -587,7 +595,8 @@ public class ServerSettings {
     public static void updateProp(EntityManager em, String key, String value) throws Exception {
 
         Object nvalue = updateProp(key, value);
-        if (nvalue != null) ServerConfigurations.updateSetting(em, key, nvalue.toString());
+        if (nvalue != null)
+            ServerConfigurations.updateSetting(em, key, nvalue.toString());
         else throw new Exception("Invalid format");
 
     }

@@ -14,6 +14,7 @@ package io.njiwa.common.rest.types;
 
 import io.njiwa.common.ServerSettings;
 import io.njiwa.common.Utils;
+import io.njiwa.common.model.RpaEntity;
 
 import java.math.BigInteger;
 import java.security.PrivateKey;
@@ -34,7 +35,7 @@ public class BasicSettings {
 
     public String ciCertificate; // CI certificate, X509 PEM-encoded for inbound, for outbound see ciCertInfo.
     public String crl; // Certificate revocation list. X509 PEM encoded for inbound, for outbound see crlInfo.
-    public String oid; // SM-SR/SM-DP OID. In/out.
+    public String sm_sr_oid, sm_dp_oid; // SM-SR/SM-DP OID. In/out.
     public String serverCertificate; // SM-DP/SM-DP Certificate. X509 PEM-encoded for inbound. Must be signed by CI. for outbound, see serverCertInfo;
     public String serverPrivateKey; // ECDSA Private key for the server. Inbound format is hex, for outbound, not set.
     public String smdpSignedData; // Signed SM-DP info for keyagreement (table 77 of SGP 02). Inbound is hex-coded. Outbound will be non-null if set.
@@ -63,12 +64,13 @@ public class BasicSettings {
 
             certificateInfo.serialNumber = certificate.getSerialNumber();
             certificateInfo.subject = certificate.getSubjectDN().getName();
-            byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(certificate); // certificate.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
             try {
+                byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(certificate);
                 certificateInfo.keyIdentifier = Utils.formatHexBytes(Utils.HEX.b2H(subjectIdentifier), ':');
             } catch (Exception ex) {}
-            byte[] caid = getCertificateAuthorityKeyIdentifier(certificate); // certificate.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
+
             try {
+                byte[] caid = getCertificateAuthorityKeyIdentifier(certificate);
                 certificateInfo.authorityKeyIdentifier = Utils.formatHexBytes(Utils.HEX.b2H(caid), ':');
             } catch (Exception ex) {}
             certificateInfo.issuer = certificate.getIssuerX500Principal().toString();
@@ -150,7 +152,8 @@ public class BasicSettings {
         try {
             settings.crlInfo = CRLInfo.create(ServerSettings.getCRL());
         } catch (Exception ex) {}
-        settings.oid = ServerSettings.getOid();
+        settings.sm_sr_oid = ServerSettings.getOid(RpaEntity.Type.SMSR);
+        settings.sm_dp_oid = ServerSettings.getOid(RpaEntity.Type.SMDP);
         settings.wsUrlPrefix = ServerSettings.getBasedeploymenturi();
 
         try {

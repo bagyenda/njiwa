@@ -13,7 +13,6 @@
 package io.njiwa.sr.transports;
 
 import io.njiwa.common.*;
-import io.njiwa.common.ServerSettings;
 import io.njiwa.sr.SmSrTransactionsPeriodicProcessor;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.model.SecurityDomain;

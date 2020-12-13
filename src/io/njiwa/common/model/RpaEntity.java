@@ -48,6 +48,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @DynamicUpdate
 @DynamicInsert
 public class RpaEntity {
+    public static final long LOCAL_ENTITY_ID = -1;
+
     private static final long serialVersionUID = 1L;
     private static final Random RANDOM = new SecureRandom();
 
@@ -84,7 +86,6 @@ public class RpaEntity {
         return x1 - x2;
     };
 
-
     @javax.persistence.Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "rpa_entity")
@@ -105,7 +106,7 @@ public class RpaEntity {
     private String x509Subject; //!< This is the X.509 certificate's subject field. It is extracted from the
     // certificate itself
 
-    @Column(nullable = true, columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String x509SKI; //!< The subject key identifier, hex-coded...
 
     //!< This is the dns name. Must be unique
@@ -267,9 +268,10 @@ public class RpaEntity {
         byte[] additionalDiscretionaryDataTlvs = ServerSettings.getAdditionalDiscretionaryDataTlvs();
         byte[] sig = type == Type.SMDP ? ServerSettings.getSMDPSignedData() : ServerSettings.getSMSRSignedData();
         RpaEntity rpa = new RpaEntity(type,null,smKeyAlias,
-                ServerSettings.getOid(), additionalDiscretionaryDataTlvs,sig,x509Subject);
+                ServerSettings.getOid(type), additionalDiscretionaryDataTlvs,sig,x509Subject);
         rpa.setSecureMessagingCertificateAlias(keyAlias);
         rpa.updateInterfaceUris(ServerSettings.getBasedeploymenturi());
+        rpa.setId(LOCAL_ENTITY_ID); // Make it as local...
         return rpa;
     }
     public static RpaEntity getlocalSMDP() throws Exception {

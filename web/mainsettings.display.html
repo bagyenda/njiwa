@@ -10,16 +10,33 @@
         <form id="settings-form" class="form-horizontal form-label-left">
             <div class="item form-group">
                 <label class="col-form-label col-md-3 col-sm-3 label-align">
-                    Site OID:
+                    SM-SR OID:
                 </label>
                 <div class="col-md-6 col-sm-6">
-                    <input type="text" placeholder="ASN.1 OID" required="required" name="oid" id="oid" class="form-control" data-rule-oid="true">
+                    <input type="text" placeholder="ASN.1 OID"
+                           required="required" name="sm_sr_oid" id="sm_sr_oid"
+                           class="form-control" data-rule-oid="true">
                     <p class="form-text text-muted">
-                        Server OID.
+                        Server  SM-SR component OID.
+                    </p>
+                </div>
+            </div>
+
+            <div class="item form-group">
+                <label class="col-form-label col-md-3 col-sm-3 label-align">
+                    SM-DP OID:
+                </label>
+                <div class="col-md-6 col-sm-6">
+                    <input type="text" placeholder="ASN.1 OID"
+                           required="required" name="sm_dp_oid" id="sm_dp_oid"
+                           class="form-control" data-rule-oid="true">
+                    <p class="form-text text-muted">
+                        Server  SM-DP component OID.
                     </p>
                 </div>
 
             </div>
+
 
             <div class="item form-group">
                 <label class="col-form-label col-md-3 col-sm-3 label-align">
@@ -172,7 +189,8 @@
 </div>
 <script type="application/javascript">
  function loadbasicsettings(data) {
-   $('#oid').val(data.oid);
+   $('#sm_sr_oid').val(data.sm_sr_oid);
+   $('#sm_dp_oid').val(data.sm_dp_oid);
    var url = data.wsUrlPrefix;
    if (!url || url.indexOf('http') !== 0 ) {
      // Make it:
@@ -220,7 +238,8 @@
         if (!confirm('Really Update?'))
           return false;
         var data = {
-          oid: $('#oid').val(),
+          sm_sr_oid: $('#sm_sr_oid').val(),
+          sm_dp_oid: $('#sm_dp_oid').val(),
           wsUrlPrefix: $('#wsUrlPrefix').val(),
           crl : getfupload($('#cicrl')),
           ciCertificate: getfupload($('#cicert')),

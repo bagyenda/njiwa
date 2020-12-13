@@ -4,6 +4,7 @@ import io.njiwa.common.ECKeyAgreementEG;
 import io.njiwa.common.PersistenceUtility;
 import io.njiwa.common.ServerSettings;
 import io.njiwa.common.Utils;
+import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.rest.annotations.RestRoles;
 import io.njiwa.common.rest.auth.UserData;
 import io.njiwa.common.rest.types.BasicSettings;
@@ -104,14 +105,24 @@ public class Settings {
     public Object save(final BasicSettings settings) {
         // Load stuff in order:
         // - ci Cert,  crl, our server cet, our server key, signed data..
-        if (settings.oid != null) try {
+        if (settings.sm_sr_oid != null) try {
             po.doTransaction((PersistenceUtility po, EntityManager em) -> {
-                ServerSettings.updateOid(em, settings.oid);
+                ServerSettings.updateOid(em, RpaEntity.Type.SMSR, settings.sm_sr_oid);
                 return true;
             });
         } catch (Exception ex) {
             return Response.status(Response.Status.BAD_REQUEST).entity(new RestResponse(RestResponse.Status.Failed,
-                    ex.getLocalizedMessage(), "oid")).build();
+                    ex.getLocalizedMessage(), "sm_sr_oid")).build();
+        }
+
+        if (settings.sm_dp_oid != null) try {
+            po.doTransaction((PersistenceUtility po, EntityManager em) -> {
+                ServerSettings.updateOid(em, RpaEntity.Type.SMDP, settings.sm_dp_oid);
+                return true;
+            });
+        } catch (Exception ex) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(new RestResponse(RestResponse.Status.Failed,
+                    ex.getLocalizedMessage(), "sm_sr_oid")).build();
         }
 
         if (settings.wsUrlPrefix != null) try {
