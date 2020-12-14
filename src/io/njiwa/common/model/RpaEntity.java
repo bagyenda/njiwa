@@ -21,13 +21,11 @@ import org.apache.commons.net.util.SubnetUtils;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
-import javax.naming.ldap.Rdn;
 import javax.persistence.*;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPrivateKey;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @brief Represents a Remote Provisioning Architecture Entity (See Figure 1 in SGP v3.0)
@@ -48,43 +46,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @DynamicUpdate
 @DynamicInsert
 public class RpaEntity {
-    public static final long LOCAL_ENTITY_ID = -1;
+    public static final long LOCAL_ENTITY_ID = -1L;
 
     private static final long serialVersionUID = 1L;
     private static final Random RANDOM = new SecureRandom();
-
-    // For sorting DNs
-    private static final Map<String, Integer> rdnOrder = new ConcurrentHashMap<String,Integer>() {{
-        put("CN", 1);
-        put("L", 2);
-        put("ST", 3);
-        put("O", 4);
-        put("OU", 5);
-        put("C", 6);
-        put("STREET", 7);
-        put("DC", 8);
-        put("UID", 9);
-    }};
-    private static final Comparator<Rdn> rdnCompare = (Rdn o1, Rdn o2) -> {
-
-        int x1, x2;
-        int notFound = 0;
-        try {
-            x1 = rdnOrder.get(o1.getType());
-        } catch (Exception ex) {
-            x1 = 100;
-            notFound++;
-        }
-        try {
-            x2 = rdnOrder.get(o2.getType());
-        } catch (Exception ex) {
-            x2 = 100;
-            notFound++;
-        }
-        if (notFound > 1)
-            return o1.getType().compareTo(o2.getType()); // Order lexicographically if both not on our list.
-        return x1 - x2;
-    };
 
     @javax.persistence.Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
@@ -247,6 +212,12 @@ public class RpaEntity {
 
     public static RpaEntity getByOID(EntityManager em, String oid, Type type) {
         try {
+            if (oid.compareTo(ServerSettings.getOid(type)) == 0)
+                return makeLocalEntity(type);
+        } catch (Exception ex) {
+
+        }
+        try {
             return em.createQuery("from RpaEntity WHERE oid = :s and type = :t", RpaEntity.class).setParameter("t",
                     type).setParameter("s", oid).setMaxResults(1).getSingleResult();
         } catch (Exception ex) {
@@ -260,25 +231,31 @@ public class RpaEntity {
             );
     }
 
-    private static RpaEntity makeLocalEntity(Type type) throws Exception {
-        Utils.Pair<String,X509Certificate> p  = ServerSettings.getServerCertAndAlias();
-        String x509Subject = p.l.getSubjectDN().getName();
-        String keyAlias = p.k;
-        String  smKeyAlias = ServerSettings.getServerEcdsaSecretKeyAlias();
-        byte[] additionalDiscretionaryDataTlvs = ServerSettings.getAdditionalDiscretionaryDataTlvs();
-        byte[] sig = type == Type.SMDP ? ServerSettings.getSMDPSignedData() : ServerSettings.getSMSRSignedData();
-        RpaEntity rpa = new RpaEntity(type,null,smKeyAlias,
-                ServerSettings.getOid(type), additionalDiscretionaryDataTlvs,sig,x509Subject);
-        rpa.setSecureMessagingCertificateAlias(keyAlias);
-        rpa.updateInterfaceUris(ServerSettings.getBasedeploymenturi());
-        rpa.setId(LOCAL_ENTITY_ID); // Make it as local...
-        return rpa;
+    private static RpaEntity makeLocalEntity(Type type)  {
+        try {
+            Utils.Pair<String, X509Certificate> p = ServerSettings.getServerCertAndAlias();
+            String x509Subject = p.l.getSubjectDN().getName();
+            String keyAlias = p.k;
+            String smKeyAlias = ServerSettings.getServerEcdsaSecretKeyAlias();
+            byte[] additionalDiscretionaryDataTlvs = ServerSettings.getAdditionalDiscretionaryDataTlvs();
+            byte[] sig = type == Type.SMDP ? ServerSettings.getSMDPSignedData() : ServerSettings.getSMSRSignedData();
+            RpaEntity rpa = new RpaEntity(type, null, smKeyAlias, ServerSettings.getOid(type), additionalDiscretionaryDataTlvs, sig, x509Subject);
+            rpa.setSecureMessagingCertificateAlias(keyAlias);
+            rpa.updateInterfaceUris(ServerSettings.getBasedeploymenturi());
+            rpa.setId(LOCAL_ENTITY_ID); // Make it as local...
+            return rpa;
+        } catch (Exception ex) {
+            String xs = ex.getMessage();
+            Utils.lg.severe(String.format("Failed to make local %s RPA Entity: %s", type, xs));
+            return null;
+        }
     }
-    public static RpaEntity getlocalSMDP() throws Exception {
+
+    public static RpaEntity getlocalSMDP()  {
         return makeLocalEntity(Type.SMDP);
     }
 
-    public static RpaEntity getlocalSMSR() throws Exception {
+    public static RpaEntity getlocalSMSR() {
         return makeLocalEntity(Type.SMSR);
     }
 

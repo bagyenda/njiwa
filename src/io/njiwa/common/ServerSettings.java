@@ -528,7 +528,7 @@ public class ServerSettings {
     public static String getOid(RpaEntity.Type type) {
         return (String) propertyValues.get(
                 type == RpaEntity.Type.SMSR ?
-                SM_SR_OID : SM_DP_OID);
+                SM_SR_OID : type == RpaEntity.Type.SMDP ? SM_DP_OID : null);
     }
 
 

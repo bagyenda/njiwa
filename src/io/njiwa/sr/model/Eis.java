@@ -276,17 +276,7 @@ public class Eis {
     }
 
     public static Eis findByEid(PersistenceUtility po, final String eid) {
-        return po.doTransaction(new PersistenceUtility.Runner<Eis>() {
-            @Override
-            public Eis run(PersistenceUtility po, EntityManager em) throws Exception {
-                return findByEid(em, eid);
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
-        });
+        return po.doTransaction((po1, em) -> findByEid(em, eid));
     }
 
     public static Eis findByMsisdn(EntityManager em, String msisdn) {

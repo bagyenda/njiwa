@@ -12,14 +12,15 @@
 
 package io.njiwa.dp.transactions;
 
+import io.njiwa.common.Utils;
 import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.ws.WSUtils;
-import io.njiwa.common.ws.types.BaseTransactionType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
 import io.njiwa.dp.model.Euicc;
 import io.njiwa.dp.model.SmDpTransaction;
 import io.njiwa.dp.ws.ES2Client;
 import io.njiwa.common.ws.types.BaseResponseType;
+import io.njiwa.sr.ws.CommonImpl;
 import io.njiwa.sr.ws.interfaces.ES3;
 
 import javax.persistence.EntityManager;
@@ -30,13 +31,8 @@ import java.io.ObjectInputStream;
 /**
  * Created by bagyenda on 09/05/2017.
  */
-public class ChangeProfileStatusTransaction extends BaseTransactionType {
+public class ChangeProfileStatusTransaction extends SmDpBaseTransactionType {
     public Action action;
-
-
-    public String iccid;
-    public long smsrId; // The ID of the SM-SR
-    public boolean sent;
 
     public ChangeProfileStatusTransaction() {
     }
@@ -52,41 +48,51 @@ public class ChangeProfileStatusTransaction extends BaseTransactionType {
     public Object sendTransaction(EntityManager em, Object tr) throws Exception {
         final SmDpTransaction trans = (SmDpTransaction) tr; // Grab the transaction
         final String eid = em.find(Euicc.class, trans.getEuicc()).getEid();
-        sent = true;
+        String msgID = trans.newRequestMessageID(); // Create new one.
+        final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
+                ".1.1", "", "", ""));
+        long trId;
         // Send as is. Get proxy, do the thing.
         try {
-            final RpaEntity smsr = em.find(RpaEntity.class, smsrId);
-            final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
-            final String toAddress = rcptTo.makeAddress();
-            final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                    rcptTo, ES3.class,
-                    RpaEntity.Type.SMDP, em,requestingEntityId);
-            WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP),
-                    "ES3");
-            String msgID = trans.newRequestMessageID(); // Create new one.
+            Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
+            final ES3 proxy = es3.l;
+            final String toAddress  = es3.k;
+            WsaEndPointReference sender = es3.m;
+
+
             Holder<String> msgType;
             switch (action) {
                 case ENABLE:
-                    msgType = new Holder<String>("http://gsma" +
-                            ".com/ES3/ProfileManagement/ES3-EnableProfile");
-                    proxy.enableProfile(sender, toAddress, null, msgID, msgType, msgID, DEFAULT_VALIDITY_PERIOD,
-                            eid, iccid, null);
+                    msgType = new Holder<>("http://gsma" + ".com/ES3/ProfileManagement/ES3-EnableProfile");
+                    if (smsrId == RpaEntity.LOCAL_ENTITY_ID)
+                        trId = CommonImpl.enableProfile(em,senderRpa,eid,status,iccid,
+                                sender,"",msgID,DEFAULT_VALIDITY_PERIOD,null,msgType);
+                    else
+                        proxy.enableProfile(sender, toAddress, null, msgID, msgType, msgID, DEFAULT_VALIDITY_PERIOD, eid, iccid, null);
+
                     break;
                 case DISABLE:
-                    msgType = new Holder<String>("http://gsma" +
+                    msgType = new Holder<>("http://gsma" +
                             ".com/ES3/ProfileManagement/ES3-DisableProfile");
-                    proxy.disableProfile(sender, toAddress, null, msgID, msgType, msgID, DEFAULT_VALIDITY_PERIOD,
-                            eid, iccid, null);
+                    if (smsrId == RpaEntity.LOCAL_ENTITY_ID)
+                        trId = CommonImpl.disableProfile(em,senderRpa,eid,status,iccid,sender,toAddress,msgID,DEFAULT_VALIDITY_PERIOD,null,msgType);
+                    else
+                        proxy.disableProfile(sender, toAddress, null, msgID, msgType, msgID, DEFAULT_VALIDITY_PERIOD,
+                                eid, iccid, null);
                     break;
                 case DELETE:
-                    msgType = new Holder<String>("http://gsma" +
+                    msgType = new Holder<>("http://gsma" +
                             ".com/ES3/ProfileManagement/ES3-DeleteISDP");
-                    proxy.deleteISDP(sender, toAddress, null, msgID, msgType, msgID, DEFAULT_VALIDITY_PERIOD,
+                    if (smsrId == RpaEntity.LOCAL_ENTITY_ID)
+                        trId = CommonImpl.deleteProfile(em,senderRpa,eid,status,iccid,sender,toAddress,msgID,DEFAULT_VALIDITY_PERIOD,null,msgType);
+                    else
+                        proxy.deleteISDP(sender, toAddress, null, msgID, msgType, msgID, DEFAULT_VALIDITY_PERIOD,
                             eid, iccid, null);
                     break;
             }
+            sent = true;
         } catch (WSUtils.SuppressClientWSRequest wsa) {
-
+            sent = false;
         } catch (Exception ex) {
 
             return false;

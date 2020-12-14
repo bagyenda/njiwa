@@ -20,6 +20,7 @@ import io.njiwa.common.Utils;
 import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
+import io.njiwa.sr.ws.CommonImpl;
 import io.njiwa.sr.ws.interfaces.ES3;
 import io.njiwa.sr.ws.types.GetEISResponse;
 import io.njiwa.sr.ws.types.Eis;
@@ -41,19 +42,24 @@ public final class ES2Client {
 
         WsaEndPointReference xto = new WsaEndPointReference(smsr,"ES3");
         String to = xto.makeAddress();
-        ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port", xto, ES3.class,
-                RpaEntity.Type.SMDP, em,smsr.getId()
-        );
+
 
         final Holder<String> msgType = new Holder<String>("http://gsma" +
                 ".com/ES3/ProfileManagent/ES3-GetEIS");
         try {
             String messageID = UUID.randomUUID().toString();
-
-            // Leave out optional (Sec B.2.1.1) wsa:From and wsa:ReplyTo
-            GetEISResponse response = proxy.getEIS(null, to, null, messageID, msgType, messageID, TransactionType.DEFAULT_VALIDITY_PERIOD,
-                    eid, new
-                            Holder<String>(relatesTo));
+            GetEISResponse response;
+            if (smsr.getId() == RpaEntity.LOCAL_ENTITY_ID) {
+                Utils.Triple<BaseResponseType.ExecutionStatus, RpaEntity, Date> p = CommonImpl.makeBaseResp(RpaEntity.getLocal(RpaEntity.Type.SMDP),"8.1.1");
+                Eis eis = CommonImpl.getEIS(em,eid, RpaEntity.Type.SMDP,p.l,p.k);
+                if (eis == null)
+                    p.k.status = BaseResponseType.ExecutionStatus.Status.Failed;
+                response = new GetEISResponse(p.m,Calendar.getInstance().getTime(),10,p.k,eis);
+            } else {
+                ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port", xto, ES3.class, RpaEntity.Type.SMDP, em, smsr.getId());
+                // Leave out optional (Sec B.2.1.1) wsa:From and wsa:ReplyTo
+                response = proxy.getEIS(null, to, null, messageID, msgType, messageID, TransactionType.DEFAULT_VALIDITY_PERIOD, eid, new Holder<String>(relatesTo));
+            }
             if (response != null)
 
                 return response;
@@ -79,20 +85,18 @@ public final class ES2Client {
 
         Date endDate = Calendar.getInstance().getTime(); // Set it
 
-        ES2 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES2Port", sendTo, ES2.class,
-                RpaEntity.Type.SMDP, em,requestorId);
         final RpaEntity originalRequestor = em.find(RpaEntity.class, requestorId);
         final WsaEndPointReference sender = new WsaEndPointReference(originallyTo,originalRequestor);
         final Holder<String> msgType = new Holder<String>("http://gsma" +
-                ".com/ES3/ProfileManagentCallBack/ES2-DownloadProfile");
+                ".com/ES2/ProfileManagentCallBack/ES2-DownloadProfile");
         try {
             String resp = response !=
                     null ?
                     Utils.HEX.b2H(response) : null;
-            proxy.downloadProfileResponse(sender, sendTo.address, relatesTO, msgType,
-                    Utils.gregorianCalendarFromDate(startDate), Utils.gregorianCalendarFromDate(endDate),
-                    TransactionType.DEFAULT_VALIDITY_PERIOD,
-                    status, iccid, resp);
+
+                ES2 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES2Port", sendTo, ES2.class, RpaEntity.Type.SMDP, em, requestorId);
+                proxy.downloadProfileResponse(sender, sendTo.address, relatesTO, msgType, Utils.gregorianCalendarFromDate(startDate), Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, iccid, resp);
+
         } catch (WSUtils.SuppressClientWSRequest s) {
         } catch (Exception ex) {
             Utils.lg.severe("Failed to issue async downloadProfile response call: " + ex.getMessage());
@@ -199,10 +203,7 @@ public final class ES2Client {
                     return getEIS(em, smsr, UUID.randomUUID().toString(), eid).eis;
                 }
 
-                @Override
-                public void cleanup(boolean success) {
 
-                }
             });
         } catch (Exception ex) {
         }

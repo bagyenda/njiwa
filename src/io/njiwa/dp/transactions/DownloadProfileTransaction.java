@@ -19,7 +19,6 @@ import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.ws.types.BaseResponseType;
-import io.njiwa.common.ws.types.BaseTransactionType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
 import io.njiwa.dp.Scp03;
 import io.njiwa.dp.model.Euicc;
@@ -28,6 +27,7 @@ import io.njiwa.dp.model.ProfileTemplate;
 import io.njiwa.dp.model.SmDpTransaction;
 import io.njiwa.dp.pedefinitions.EUICCResponse;
 import io.njiwa.dp.ws.ES2Client;
+import io.njiwa.sr.ws.CommonImpl;
 import io.njiwa.sr.ws.interfaces.ES3;
 import io.njiwa.sr.ws.types.*;
 
@@ -41,15 +41,13 @@ import java.security.KeyPair;
 import java.security.SecureRandom;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
  * @brief Represents a downloadProfile transactions (see Sec 5.3.2 of SGP 02 v3.1
  */
-public class DownloadProfileTransaction extends BaseTransactionType implements Scp03.GetKey,
+public class DownloadProfileTransaction extends SmDpBaseTransactionType implements Scp03.GetKey,
         ProfileTemplate.ConnectivityParams {
     public static final byte SCP03_KEY_VERSION = 0x03;
     public static final byte SCP03_KEY_ID = 0x01;
@@ -60,7 +58,7 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
     public boolean enableProfile;
     public byte[] profileTLVs;
     public int offset; // Offset into profileTLVs
-    public long smsrId; // The ID of the SM-SR
+
     public byte[] randomChallenge; // Random challenge returned by the card...
     public byte[] hostID; // Our generated host ID
     public byte[] sdin;
@@ -69,7 +67,7 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
     public int ecasd_pubkey_paramRef;
     public byte[] secureChannelBaseKey;
     public byte[] receiptKey;
-    public String iccid; // Profile ICCID
+
     // The ephemeral  keys
     public byte[] eSK_DP_ECKA, ePK_DP_ECKA;
     public ConcurrentLinkedDeque<Scp03.Session> scp03Sessions;
@@ -396,19 +394,29 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
 
     private boolean doSendData(EntityManager em, byte[] data, SmDpTransaction trans) {
         try {
-            RpaEntity smsr;
-            smsr = smsrId == RpaEntity.LOCAL_ENTITY_ID ? RpaEntity.getlocalSMSR() :  em.find(RpaEntity.class, smsrId);
-
-            final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
-            final String toAddress = rcptTo.makeAddress();
-            final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port", rcptTo,
-                    ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
-            WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP), "ES3");
-            final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
-                    "-CreateISDP");
             String msgID = trans.newRequestMessageID(); // Create new one.
             String aid = trans.getIsdp().getAid(); // Get AID
-            SendDataResponse resp = proxy.sendData(sender, toAddress, null, msgID, msgType, msgID,
+
+            Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
+            final ES3 proxy = es3.l;
+            WsaEndPointReference sender = es3.m;
+            final String toAddress = es3.k;
+
+            final Holder<String> msgType = new Holder<>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
+                    "-SendData");
+
+            SendDataResponse resp;
+            if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
+                Date startTime = Calendar.getInstance().getTime();
+                final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
+                        ".1.1", "SendData", "", ""));
+                Long trId = CommonImpl.sendData(em,sender,null,eid,msgType.value,aid,Utils.HEX.b2H(data),true,msgID,DEFAULT_VALIDITY_PERIOD,toAddress,senderRpa,status);
+                if (trId == null)
+                    status.status = BaseResponseType.ExecutionStatus.Status.Failed;
+                resp = new SendDataResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD, status, null);
+            }
+            else
+                resp = proxy.sendData(sender, toAddress, null, msgID, msgType, msgID,
                     TransactionType.DEFAULT_VALIDITY_PERIOD, eid, aid, Utils.HEX.b2H(data), true, null);
             if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                 throw new Exception("Execution failed: " + resp);
@@ -429,21 +437,29 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
             case CREATEISDP:
 
                 try {
-                    RpaEntity smsr = em.find(RpaEntity.class, smsrId);
-
-                    final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
-                    final String toAddress = rcptTo.makeAddress();
-                    final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                            rcptTo, ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
-                    WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP),
-                            "ES3");
-                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
-                            "-CreateISDP");
                     String msgID = trans.newRequestMessageID(); // Create new one.
                     ProfileTemplate profileTemplate = isdp.getProfileTemplate();
                     String mnoOID = isdp.getMno_oid();
-                    em.flush(); // XXX Right?
-                    CreateISDPResponse resp = proxy.createISDP(sender, toAddress, null, msgID, msgType, msgID,
+
+                    Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
+                    final String toAddress = es3.k;
+                    final ES3 proxy = es3.l;
+                    WsaEndPointReference sender = es3.m;
+
+                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
+                            "-CreateISDP");
+                    CreateISDPResponse resp;
+                    if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
+                        Date startTime = Calendar.getInstance().getTime();
+                        BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess,
+                                new BaseResponseType.ExecutionStatus.StatusCode("8" +
+                                        ".1.1", "CreateISDP", "", ""));
+                        Long trId = CommonImpl.createISDP(em,eid,status,iccid,mnoOID,sender,toAddress,msgID,DEFAULT_VALIDITY_PERIOD,null,msgType,profileTemplate.getRequiredMemory(),true,senderRpa);
+                        if (trId == null)
+                            status.status = BaseResponseType.ExecutionStatus.Status.Failed;
+                        resp = new CreateISDPResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD/**/, status, null, null);
+                    } else
+                     resp = proxy.createISDP(sender, toAddress, null, msgID, msgType, msgID,
                             TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), isdp.getIccid(),
                             mnoOID, profileTemplate.getRequiredMemory(), true, null);
                     if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
@@ -535,16 +551,6 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                 return true;
             case PROFILEDOWNLOADCOMPLETE: // Indicate done, move to next...
                 try {
-                    final RpaEntity smsr = em.find(RpaEntity.class, smsrId);
-
-                    final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
-                    final String toAddress = rcptTo.makeAddress();
-                    final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                            rcptTo, ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
-                    WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP),
-                            "ES3");
-                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
-                            "-ProfileDownloadCompletedRequest");
                     String iccid = isdp.getIccid();
                     ProfileTemplate profileTemplate = isdp.getProfileTemplate();
                     String profType = profileTemplate.getType();
@@ -552,14 +558,33 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                     String msgID = trans.newRequestMessageID();
                     address.imsi = this.imsi;
                     address.msisdn = this.msisdn;
-                    BaseResponseType resp = proxy.profileDownloadCompleted(sender, toAddress, null, msgID, msgType,
+
+                    Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
+                    final ES3 proxy = es3.l;
+                    final String toAddress  = es3.k;
+                    WsaEndPointReference sender = es3.m;
+
+                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
+                            "-ProfileDownloadCompletedRequest");
+                    BaseResponseType resp;
+                    if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
+                        Date startTime = Calendar.getInstance().getTime();
+                        BaseResponseType.ExecutionStatus status =
+                                new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess,
+                                        new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "SendData", "", ""));
+
+                        CommonImpl.profileDownloadComplete(em,status,senderRpa,eid,iccid,profType,address,pol2);
+                        resp = new SendDataResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD, status, null);
+                    } else
+                        resp = proxy.profileDownloadCompleted(sender, toAddress, null, msgID, msgType,
                             msgID, TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, profType
                             , address, pol2);
                     boolean isSuccess =
                             (resp != null && resp.functionExecutionStatus.status == BaseResponseType.ExecutionStatus.Status.ExecutedSuccess);
 
                     trans.recordResponse(em, "ProfiledownloadComplete", resp.toString(), isSuccess);
-                    if (!isSuccess) throw new Exception("Execution failed: " + resp);
+                    if (!isSuccess)
+                        throw new Exception("Execution failed: " + resp);
                     currentStage = Stage.ENABLEPROFILE; // Skip to next
                     return true;
                 } catch (Exception ex) {
@@ -568,22 +593,27 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
             case ENABLEPROFILE:
                 if (!enableProfile) {
                     currentStage = Stage.COMPLETE;
-                    return true;
                 } else {
                     try {
-                        final RpaEntity smsr = em.find(RpaEntity.class, smsrId);
+                        Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
+                        final ES3 proxy = es3.l;
+                        final String toAddress  = es3.k;
+                        WsaEndPointReference sender = es3.m;
 
-                        final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr, "ES3");
-                        final String toAddress = rcptTo.makeAddress();
-                        final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                                rcptTo, ES3.class, RpaEntity.Type.SMDP, em, requestingEntityId);
-                        WsaEndPointReference sender =
-                                new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP), "ES3");
                         final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement" +
                                 "/ES3-EnableISDP");
                         String msgID = trans.newRequestMessageID(); // Create new one.
                         String iccid = isdp.getIccid();
-                        EnableProfileResponse resp = proxy.enableProfile(sender, toAddress, null, msgID, msgType,
+                        EnableProfileResponse resp;
+                        if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
+                            Date startTime = Calendar.getInstance().getTime();
+                            BaseResponseType.ExecutionStatus status =
+                                    new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess,
+                                            new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "SendData", "", ""));
+                            CommonImpl.enableProfile(em,senderRpa,eid,status,iccid,sender,toAddress,msgID,DEFAULT_VALIDITY_PERIOD,null,msgType);
+                            resp = new EnableProfileResponse(startTime, Calendar.getInstance().getTime(), status, null);
+                        } else
+                            resp = proxy.enableProfile(sender, toAddress, null, msgID, msgType,
                                 msgID, TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, null);
                         if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                             throw new Exception("Execution failed: " + resp);
@@ -593,8 +623,8 @@ public class DownloadProfileTransaction extends BaseTransactionType implements S
                         Utils.lg.severe("Failed to issue async enable isdp call: " + ex.getMessage());
                         return false;
                     }
-                    return true;
                 }
+                return true;
         }
 
         return false;

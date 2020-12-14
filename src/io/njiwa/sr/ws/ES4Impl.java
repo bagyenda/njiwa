@@ -13,6 +13,7 @@
 package io.njiwa.sr.ws;
 
 import io.njiwa.common.PersistenceUtility;
+import io.njiwa.common.Utils;
 import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.ws.handlers.Authenticator;
@@ -89,16 +90,10 @@ public class ES4Impl {
     ) {
         relatesTo.value = messageId;
         messageType.value = "http://gsma.com/ES4/ProfileManagent/ES4-GetEISResponse";
-        final RpaEntity sender = Authenticator.getUser(context); // Get the sender
-        Date startDate = Calendar.getInstance().getTime();
-        BaseResponseType.ExecutionStatus.Status status = BaseResponseType.ExecutionStatus.Status.ExecutedSuccess;
-        final BaseResponseType.ExecutionStatus.StatusCode statusCode = new BaseResponseType.ExecutionStatus.StatusCode("8" +
-                ".1.1", "GetEIS", "", "");
-        BaseResponseType.ExecutionStatus st = new BaseResponseType.ExecutionStatus(status,
-                statusCode);
-        io.njiwa.sr.ws.types.Eis eis = CommonImpl.getEIS(po, eid, RpaEntity.Type.MNO, sender, st);
-        return new GetEISResponse(startDate, Calendar.getInstance().getTime(), validityPeriod,
-                st, eis);
+        final Utils.Triple<BaseResponseType.ExecutionStatus,RpaEntity,Date> resp = CommonImpl.makeBaseResp(context,"GetEIS");
+        io.njiwa.sr.ws.types.Eis eis = po.doTransaction((po, em) -> CommonImpl.getEIS(em, eid, RpaEntity.Type.MNO, resp.l, resp.k));
+        return new GetEISResponse(resp.m, Calendar.getInstance().getTime(), validityPeriod,
+                resp.k, eis);
     }
 
     @WebMethod(operationName = "PrepareSMSRChangeRequest")
@@ -335,8 +330,8 @@ public class ES4Impl {
                 new BaseResponseType.ExecutionStatus.StatusCode("8" +
                         ".1.1", "", "", ""));
 
-        Long tr = CommonImpl.deleteProfile(po, sender, eid, status, iccid, RpaEntity.Type.MNO, senderEntity,
-                receiverEntity, messageId, validityPeriod, replyTo, messageType);
+        Long tr = po.doTransaction((po, em) -> CommonImpl.deleteProfile(em, sender, eid, status, iccid, senderEntity,
+                receiverEntity, messageId, validityPeriod, replyTo, messageType));
 
 
         if (tr == null)
@@ -392,8 +387,8 @@ public class ES4Impl {
         final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
                 ".1.1", "", "", ""));
 
-        Long tr = CommonImpl.disableProfile(po, sender, eid, status, iccid, RpaEntity.Type.MNO, senderEntity,
-                receiverEntity, messageId, validityPeriod, replyTo, messageType);
+        Long tr = po.doTransaction((po, em) -> CommonImpl.disableProfile(em, sender, eid, status, iccid,  senderEntity,
+                receiverEntity, messageId, validityPeriod, replyTo, messageType));
 
         if (tr == null)
             return new DisableProfileResponse(startTime, Calendar.getInstance().getTime(), status, null);
@@ -445,8 +440,8 @@ public class ES4Impl {
         final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
                 ".1.1", "EnableProfile", "", ""));
 
-        Long tr = CommonImpl.enableProfile(po, sender, eid, status, iccid, RpaEntity.Type.MNO, senderEntity,
-                receiverEntity, messageId, validityPeriod, replyTo, messageType);
+        Long tr = po.doTransaction((po, em) -> CommonImpl.enableProfile(em, sender, eid, status, iccid,  senderEntity,
+                receiverEntity, messageId, validityPeriod, replyTo, messageType));
 
         if (tr == null)
             return new EnableProfileResponse(startTime, Calendar.getInstance().getTime(), status, null);
@@ -489,7 +484,7 @@ public class ES4Impl {
                                               @WebParam(name = "pol2")
                                               final Pol2Type pol2) {
         final RpaEntity sender = Authenticator.getUser(context); // Get the sender
-        return CommonImpl.updatePolicyRules(po, sender, eid, iccid, pol2, RpaEntity.Type.MNO);
+        return po.doTransaction((po, em) -> CommonImpl.updatePolicyRules(em, sender, eid, iccid, pol2));
     }
 
     @WebMethod(operationName = "AuditEIS")
@@ -534,8 +529,8 @@ public class ES4Impl {
 
         final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
                 ".1.1", "EnableProfile", "", ""));
-        Long tr = CommonImpl.auditEIS(po,sender,eid,null,status, RpaEntity.Type.MNO,senderEntity,receiverEntity,
-                messageId,validityPeriod,replyTo,messageType);
+        Long tr = po.doTransaction((po, em) -> CommonImpl.auditEIS(em,sender,eid,null,status, RpaEntity.Type.MNO,senderEntity,receiverEntity,
+                messageId,validityPeriod,replyTo,messageType));
         if (tr == null)
             return new AuditEISResponse(startDate,Calendar.getInstance().getTime(),validityPeriod,status,null);
         resp.sendError(Response.Status.ACCEPTED.getStatusCode(), "");

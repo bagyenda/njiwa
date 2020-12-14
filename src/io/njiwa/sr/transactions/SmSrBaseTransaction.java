@@ -87,8 +87,14 @@ public class SmSrBaseTransaction extends BaseTransactionType {
         Session gwsession = new Session(em, eis);
         String reqId = otaParams.mkRequestID();
 
-        Utils.Triple<Integer, Long, Transport.MessageStatus> sres = sender.sendOTA(gwsession, otaParams, em, ctx, reqId,
+        Utils.Triple<Integer, Long, Transport.MessageStatus> sres;
+        if (xres.k != null && xres.k.length > 0)
+             sres = sender.sendOTA(gwsession, otaParams, em, ctx, reqId,
                 transid, transportType.toString(), TAG, xres.k);
+        else {
+            Utils.lg.warning(String.format("No OTA data to send, [eis: %s], tr [%s]", eis,transid));
+            sres = null;
+        }
         int lastIndex = xres.l;
         tr.getTransObject().lastIndex = lastIndex; // Set the last requested index
         reqId = ctx.requestID;

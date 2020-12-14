@@ -138,17 +138,7 @@ public class SmDpTransaction {
     }
 
     public static SmDpTransaction findbyRequestID(PersistenceUtility po, final String requestMessageID) {
-        return po.doTransaction(new PersistenceUtility.Runner<SmDpTransaction>() {
-            @Override
-            public SmDpTransaction run(PersistenceUtility po, EntityManager em) throws Exception {
-                return findbyRequestID(em, requestMessageID);
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
-        });
+        return po.doTransaction((po1, em) -> findbyRequestID(em, requestMessageID));
     }
 
 

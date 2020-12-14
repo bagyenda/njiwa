@@ -12,6 +12,7 @@
 
 package io.njiwa.common.ws.types;
 
+import io.njiwa.common.Utils;
 import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.model.TransactionType;
 
@@ -36,6 +37,7 @@ public class BaseTransactionType  extends TransactionType {
     public BaseTransactionType() {} // So things work fine...
     public RpaEntity.Type requestorType;
     public Date startDate = Calendar.getInstance().getTime(); // Set it to time of creation
+    public Date  endDate  = null;
 
     public final void updateBaseData(WsaEndPointReference from, String to, String relatesTO, long validity,
                                      WsaEndPointReference replyTo, Long requestingEntity)
@@ -68,4 +70,24 @@ public class BaseTransactionType  extends TransactionType {
         }
         return x;
     }
+
+    /**
+     * @brief marks transaction as complete by setting end time, cleans up status field
+     * @param em
+     * @return
+     */
+    public  Utils.Pair<WsaEndPointReference,WsaEndPointReference> markTransactionEnded(EntityManager em)
+    {
+        endDate = Calendar.getInstance().getTime();
+        if (status == null)
+            status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
+                    new BaseResponseType.ExecutionStatus.StatusCode("8.4", "", "4.2", ""));
+        WsaEndPointReference
+                replyToAddress = getReplyToAddress(em, requestorType == RpaEntity.Type.SMDP ? "ES3" : "ES4");
+        final WsaEndPointReference sender = new WsaEndPointReference();
+        sender.address = originallyTo;
+
+        return  new Utils.Pair<>(replyToAddress,sender);
+    }
+
 }

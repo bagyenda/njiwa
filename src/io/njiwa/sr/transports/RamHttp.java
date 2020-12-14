@@ -188,37 +188,6 @@ public class RamHttp extends Transport {
         }
     }
 
-    /**
-     * @param sim - The eis entry
-     * @return - whether Smart card RAMHTTP is supported
-     * @brief Given an Eis, return whether it supports RAM
-     * HTTP.
-     */
-    private boolean getHttpInfo(Eis sim) {
-        boolean ramHttpSupport = sim.getHttp_support();
-        boolean hasDataPlan = sim.getHasDataPlan();
-
-        // If the sim has the web server, then check data plan and update
-        Date lastDplan = sim.getLastDataPlanFetch();
-        Date tnow = Calendar.getInstance().getTime();
-        long ldiff = (lastDplan == null) ? ServerSettings.getMax_bip_data_flag_cache_interval() + 100 :
-                (tnow.getTime() - lastDplan.getTime()) / 1000;
-        int numOpenRequests = sim.getNumPendingRAMRequests();
-
-
-        if (numOpenRequests > ServerSettings.getRamMaxSendRequests()) {
-            ramHttpSupport = false;
-        } else {
-            if (ramHttpSupport && (!hasDataPlan || ldiff > ServerSettings.getMax_bip_data_flag_cache_interval()))
-                hasDataPlan = checkAndUpdateSimDataFlag(sim, TransportType.RAMHTTP);
-        }
-        // Smart cad web server support is NOT predicated on data support. You can still send commands using the
-        //simplified protocol (via SMS)
-
-
-        return ramHttpSupport;
-    }
-
     @Override
     public boolean processTransMessageStatus(EntityManager em, SmSrTransaction bt, boolean success, boolean retry,
                                              byte[] data) {
@@ -246,19 +215,6 @@ public class RamHttp extends Transport {
     @Override
     public TransportType sendMethod() {
         return TransportType.RAMHTTP;
-    }
-
-    /**
-     * @param bt - The batch
-     * @return - True if this is a RAM HTTP transaction
-     * @brief Returns true if this is a RAM-over-HTTP transaction. This is decided by the existance of the "RAM HTTP"
-     * parameter in the batch
-     * parameters
-     */
-    private boolean isRamHttpTrans(SmSrTransaction bt) {
-        if (bt == null) return false;
-        TransportType t = bt.getLastTransportUsed();
-        return t == TransportType.RAMHTTP;
     }
 
     /**
@@ -356,19 +312,21 @@ public class RamHttp extends Transport {
      * @param em
      * @param bt
      * @param input
+     * @param r
      * @param success
      * @param xstatus
      * @brief Given a single HTTP response, process it, record the result against the transaction
      */
-    private void processSingleResponse(EntityManager em, SmSrTransaction bt, byte[] input, boolean success,
-                                       String xstatus) throws Exception {
+    private void processSingleResponse(EntityManager em, SmSrTransaction bt, byte[] input,
+                                       boolean success, String xstatus) throws Exception {
         // XXX This bit is copied largely from Ota.processMO(). Perhaps we should refactor?
 
 
         try {
             long t = Calendar.getInstance().getTimeInMillis();
             String reqid = String.format("%d", t); // Make fake ReqID
-            bt.getTransObject().handleResponse(em, bt.getId(), success ? TransactionType.ResponseType.SUCCESS :
+           TransactionType trobj =  bt.getTransObject();
+            trobj.handleResponse(em, bt.getId(), success ? TransactionType.ResponseType.SUCCESS :
                     TransactionType.ResponseType.ERROR, reqid, input); // Do success
         } catch (Exception ex) {
 
@@ -415,8 +373,8 @@ public class RamHttp extends Transport {
                 boolean success = xres.k; // Whether success
                 String xstatus = xres.m;
 
-
-                processSingleResponse(em, bt, output, success, xstatus);
+                tobj.setResponses(xres.o);
+                processSingleResponse(em, bt, output,   success, xstatus);
                 nextBt = success ? bt.findNextAvailableTransaction(em) : null;
                 //  em.flush(); // Right?
             } else {

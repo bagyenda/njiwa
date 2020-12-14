@@ -19,6 +19,7 @@ import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
 import io.njiwa.common.SDCommand;
+import io.njiwa.dp.ws.CommonImpl;
 import io.njiwa.sr.model.AuditTrail;
 import io.njiwa.sr.model.ProfileInfo;
 import io.njiwa.sr.model.Eis;
@@ -133,24 +134,18 @@ public class CreateISDPTransaction extends SmSrBaseTransaction {
         AuditTrail.addAuditTrail(em,tid, AuditTrail.OperationType.CreateISDP,status,ispaid,iccid,null,null);
         Date endDate = Calendar.getInstance().getTime(); // Set it
 
-// Log
-
-        final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                getReplyToAddress(em, "ES3"), ES3.class, RpaEntity.Type.SMSR, em,requestingEntityId);
-        // Make params to send
-
         final WsaEndPointReference sender = new WsaEndPointReference();
         sender.address = originallyTo;
         final Holder<String> msgType = new Holder<String>("http://gsma" +
                 ".com/ES3/ProfileManagementCallBack/ES3-CreateISDP");
 
         try {
-            proxy.createISDPResponse(sender, getReplyToAddress(em, "ES3").address, relatesTO, msgType,
-                    Utils.gregorianCalendarFromDate(startDate),
-                    Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, ispaid, response !=
-                            null ?
-                            Utils.HEX.b2H(response) : null);
-
+            if (requestingEntityId == RpaEntity.LOCAL_ENTITY_ID)
+                CommonImpl.createISDPResponseHandler(em,ispaid,relatesTO,response != null ? Utils.HEX.b2H(response) : null);
+            else {
+                final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port", getReplyToAddress(em, "ES3"), ES3.class, RpaEntity.Type.SMSR, em, requestingEntityId);
+                proxy.createISDPResponse(sender, getReplyToAddress(em, "ES3").address, relatesTO, msgType, Utils.gregorianCalendarFromDate(startDate), Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, ispaid, response != null ? Utils.HEX.b2H(response) : null);
+            }
         } catch (WSUtils.SuppressClientWSRequest wsa) {
         } catch (Exception ex) {
             Utils.lg.severe("Failed to issue async createisdp.response call: " + ex.getMessage());

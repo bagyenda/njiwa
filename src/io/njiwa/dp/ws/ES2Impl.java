@@ -130,17 +130,7 @@ public class ES2Impl {
         try {
            // final RpaEntity myRpa = WSUtils.getMyRpa(po, RpaEntity.Type.SMDP);
             final String xrelatesTo = UUID.randomUUID().toString();
-            io.njiwa.sr.ws.types.GetEISResponse response = po.doTransaction(new PersistenceUtility.Runner<io.njiwa.sr.ws.types.GetEISResponse>() {
-                @Override
-                public io.njiwa.sr.ws.types.GetEISResponse run(PersistenceUtility po, EntityManager em) throws Exception {
-                    return ES2Client.getEIS(em, smsr, xrelatesTo, eid);
-                }
-
-                @Override
-                public void cleanup(boolean success) {
-
-                }
-            });
+            io.njiwa.sr.ws.types.GetEISResponse response = po.doTransaction((po, em) -> ES2Client.getEIS(em, smsr, xrelatesTo, eid));
 
             statusCode = response.functionExecutionStatus.statusCodeData;
             status = response.functionExecutionStatus.status;

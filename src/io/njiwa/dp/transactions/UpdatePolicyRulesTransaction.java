@@ -12,12 +12,13 @@
 
 package io.njiwa.dp.transactions;
 
+import io.njiwa.common.Utils;
 import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.ws.WSUtils;
 import io.njiwa.dp.model.Euicc;
 import io.njiwa.dp.model.SmDpTransaction;
-import io.njiwa.common.ws.types.BaseTransactionType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
+import io.njiwa.sr.ws.CommonImpl;
 import io.njiwa.sr.ws.interfaces.ES3;
 import io.njiwa.sr.ws.types.Pol2Type;
 
@@ -27,11 +28,9 @@ import javax.xml.ws.Holder;
 /**
  * Created by bagyenda on 25/05/2017.
  */
-public class UpdatePolicyRulesTransaction extends BaseTransactionType {
-    public long smsrId;
-    public String iccid;
+public class UpdatePolicyRulesTransaction extends SmDpBaseTransactionType {
     public Pol2Type pol2;
-    public boolean sent;
+
     public UpdatePolicyRulesTransaction() {}
 
     public UpdatePolicyRulesTransaction(long smsrId,String iccid, Pol2Type pol2)
@@ -52,18 +51,19 @@ public class UpdatePolicyRulesTransaction extends BaseTransactionType {
     public Object sendTransaction(EntityManager em, Object tr) throws Exception {
         final SmDpTransaction trans = (SmDpTransaction) tr; // Grab the transaction
         final String eid = em.find(Euicc.class, trans.getEuicc()).getEid();
-
+        Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
+        final ES3 proxy = es3.l;
+        final String toAddress  = es3.k;
+        WsaEndPointReference sender = es3.m;
+        RpaEntity smsr = targetSMSR;
         try {
-            RpaEntity smsr = em.find(RpaEntity.class,smsrId);
-            final WsaEndPointReference rcptTo = new WsaEndPointReference(smsr,"ES3");
-            final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                    rcptTo, ES3.class,
-                    RpaEntity.Type.SMDP, em,requestingEntityId);
-            WsaEndPointReference sender = new WsaEndPointReference(RpaEntity.getLocal(RpaEntity.Type.SMDP),
-                    "ES3");
+
             String msgID = trans.newRequestMessageID(); // Create new one.
             Holder<String> msgType = new Holder<>("http://gsma.com/ES3/ProfileManagement/ES3-UpdatePolicyRules");
-            proxy.updatePolicyRules(sender,rcptTo.makeAddress(),null,msgID,msgType,msgID,DEFAULT_VALIDITY_PERIOD,eid,
+            if (smsrId == RpaEntity.LOCAL_ENTITY_ID)
+                CommonImpl.updatePolicyRules(em,senderRpa,eid,iccid,pol2);
+            else
+                proxy.updatePolicyRules(sender,toAddress,null,msgID,msgType,msgID,DEFAULT_VALIDITY_PERIOD,eid,
                     iccid,pol2);
         } catch (WSUtils.SuppressClientWSRequest wsa) {
         } catch (Exception ex) {

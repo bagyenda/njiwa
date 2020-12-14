@@ -78,18 +78,7 @@ public abstract class TransactionType {
                                                      final String
                                                              reqId,
                                                      final byte[] response) {
-        return po.doTransaction(new PersistenceUtility.Runner<Boolean>() {
-            @Override
-            public Boolean run(PersistenceUtility po, EntityManager em) throws Exception {
-                return handleResponse(em, tid, status, reqId, response);
-
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
-        });
+        return po.doTransaction((po1, em) -> handleResponse(em, tid, status, reqId, response));
     }
 
     /**
@@ -111,6 +100,10 @@ public abstract class TransactionType {
         return hasMore();
     }
 
+    public boolean handleResponse(EntityManager em, long tid, ResponseType status, String reqId, String response)
+    {
+        return handleResponse(em,tid,status,reqId,response != null ? Utils.HEX.h2b(response) : null);
+    }
 
     public boolean hasMore() {
         return index < cAPDUs.size();

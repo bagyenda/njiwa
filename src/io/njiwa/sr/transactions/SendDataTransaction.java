@@ -18,6 +18,7 @@ import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
+import io.njiwa.dp.ws.CommonImpl;
 import io.njiwa.sr.ws.interfaces.ES3;
 
 import javax.ejb.Asynchronous;
@@ -33,8 +34,6 @@ import java.util.Map;
  */
 public class SendDataTransaction extends SmSrBaseTransaction {
 
-    public String sdAid = null; // The AID
-
     public Map<String, Boolean> respMap = new HashMap<String, Boolean>();
     public byte[] response = new byte[0];
 
@@ -49,20 +48,19 @@ public class SendDataTransaction extends SmSrBaseTransaction {
         Date endDate = Calendar.getInstance().getTime(); // Set it
 
 
-        final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port",
-                getReplyToAddress(em, "ES3"), ES3.class, RpaEntity.Type.SMSR, em,requestingEntityId);
+
         final WsaEndPointReference sender = new WsaEndPointReference();
         sender.address = originallyTo;
         final Holder<String> msgType = new Holder<String>("http://gsma" +
                 ".com/ES3/ProfileManagentCallBack/ES3-SendData");
 
         try {
-            proxy.sendDataResponse(sender, getReplyToAddress(em, "ES3").address, relatesTO, msgType, Utils
-                            .gregorianCalendarFromDate
-                                    (startDate),
-                    Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, response !=
-                            null ?
-                            Utils.HEX.b2H(response) : null);
+            if (requestingEntityId == RpaEntity.LOCAL_ENTITY_ID) {
+                CommonImpl.sendDataResponseHandler(em,status,relatesTO,response != null ? Utils.HEX.b2H(response) : null);
+            } else {
+                ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port", getReplyToAddress(em, "ES3"), ES3.class, RpaEntity.Type.SMSR, em, requestingEntityId);
+                proxy.sendDataResponse(sender, getReplyToAddress(em, "ES3").address, relatesTO, msgType, Utils.gregorianCalendarFromDate(startDate), Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, response != null ? Utils.HEX.b2H(response) : null);
+            }
         } catch (WSUtils.SuppressClientWSRequest wsa) {
         } catch (Exception ex) {
             Utils.lg.severe("Async sendDataResponse failed: " + ex.getMessage());

@@ -40,6 +40,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.util.BigIntegers;
 import org.bouncycastle.util.Store;
+import org.jboss.resteasy.util.Hex;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -744,7 +745,7 @@ public class Utils {
         return DatatypeFactory.newInstance().newXMLGregorianCalendar(gc);
     }
 
-    public static String ramHTTPPartIDfromAID(String aid) throws Exception {
+    public static String ramHTTPPartIDfromAID(String aid) {
         String rid, pix;
 
         rid = aid.substring(0, 10);
@@ -2062,8 +2063,10 @@ public class Utils {
             public boolean keepAlive = false; //!< Whether keep-alive is in use
 
             protected boolean chunked = false; //!< Whether chunked encoding is in use
+            protected boolean chunkedHeaderSeen = false;
             protected boolean hasTrailers = false; //!< Whether the chunked body has trailers
             protected int bodyLen = 0; //!< The HTTP Body length
+            protected boolean contentLengthSeen = false;
 
             /**
              * @param in
@@ -2178,17 +2181,25 @@ public class Utils {
                         keepAlive = false; // Close the connection
                     if (header.equalsIgnoreCase("Content-Length")) {
                         try {
+                            String.format("Http Incoming Content-Length Header: %s", value);
+                            contentLengthSeen = true;
                             bodyLen = Integer.parseInt(value);
                         } catch (Exception ex) {
                             bodyLen = 0;
                         }
                     } else if (header.equalsIgnoreCase("TE")) {
+                        String.format("Http Incoming TE Header: %s", value);
                         hasTrailers = value.equalsIgnoreCase("trailers"); // As per sec 14.39 of RFC 2616
                     } else if (header.equalsIgnoreCase("Transfer-Encoding")) {
+                        String.format("Http Incoming Transfer-Encoding Header: %s", value);
                         chunked = value.toLowerCase().contains("chunked");
-                    } else headers.put(header, value);
+                        chunkedHeaderSeen = chunked;
+                    } else
+                        headers.put(header, value);
 
                 }
+
+
                 String xout = "";
                 for (Map.Entry<String, String> e : headers.entrySet())
                     xout += String.format("\nHttp Incoming Header %s: %s", e.getKey(), e.getValue());
@@ -2205,14 +2216,23 @@ public class Utils {
             private void readBody(InputStream in) throws Exception {
                 // Body follows.
                 String s;
-                if (!hasBody()) bodyLen = 0; // Regardless
+                if (!hasBody())
+                    bodyLen = 0; // Regardless
                 else if (chunked) {
                     // Read chunked: Sec 3.6.1 of the RFC
                     int len;
+                    byte[] trailer = new byte[2];
                     ByteArrayOutputStream xos = new ByteArrayOutputStream();
-                    while ((s = readLine(in)) != null && !s.trim().isEmpty() && (len = getChunkSize(s)) > 0) {
-                        xos.write(readBytes(in, len)); // Read each chunk, append it.
-                        String trailer = readLine(in); // Remove the chunk trailer.
+                    while ((s = readLine(in)) != null &&
+                            !s.trim().isEmpty() &&
+                            (len = getChunkSize(s)) > 0) {
+                        byte[] data = readBytes(in, len);
+                        xos.write(data); // Read each chunk, append it.
+                        // Read trailer
+                        in.read(trailer);
+
+                        if (trailer[0] != '\r' && trailer[1] != '\n')
+                            Utils.lg.warning("Invalid chunked encoding trailer, got: %s" + HEX.b2H(trailer));
                     }
 
                     body = xos.toByteArray();
@@ -2227,7 +2247,9 @@ public class Utils {
                         readLine(in); // Remove the last CRLF
                     }
 
-                } else body = readBytes(in, bodyLen);
+                }
+                else
+                    body = readBytes(in, bodyLen);
 
                 Utils.lg.info(String.format("HTTP server, body received: %s", HEX.b2H(body)));
             }
@@ -2301,7 +2323,11 @@ public class Utils {
                     xos.write(pre);
                     xos.write(body);
                     xos.write(post);
+                    
+                    xos.write("0\r\n\r\n".getBytes(StandardCharsets.UTF_8)); // Last chunk, write...
                 }
+
+
                 byte[] xout = xos.toByteArray();
                 out.write(xout); // Write all at once. Right?
                 out.flush();
@@ -2449,7 +2475,7 @@ public class Utils {
 
             public Response(javax.ws.rs.core.Response.Status rStatus, Map<String, String> rHeaders, String ctype,
                             byte[] body, boolean closeConn) {
-                headers = new HashMap<String, String>(rHeaders != null ? rHeaders : new HashMap<String, String>());
+                headers = new HashMap<>(rHeaders != null ? rHeaders : new HashMap<String, String>());
 
                 headers.put("Date", getServerTime());
                 //  headers.put("Server", "My server");
@@ -2468,7 +2494,11 @@ public class Utils {
             @Override
             protected boolean hasBody() {
                 int code = status.getStatusCode();
-                return (code / 100 != 1) && (code != 204) && (code != 304);
+                boolean t = (code / 100 != 1) && (code != 204) && (code != 304);
+                // Process chunked.
+                if (!contentLengthSeen)
+                    chunked = true; // Sec 2.4.4.2 of SGP 02 v4.1
+                return t;
             }
 
             /**
@@ -2489,7 +2519,7 @@ public class Utils {
              * @brief The first line is always of the form VERSION STATUS [STATUS_MESSAGE]
              */
             @Override
-            protected void parseStartLine(String line) throws Exception {
+            protected void parseStartLine(String line){
                 String[] xl = line.split("\\s+", 3);
 
                 parseVersionFromProtocol(xl[0]);
