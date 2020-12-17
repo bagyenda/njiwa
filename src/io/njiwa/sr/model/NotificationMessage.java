@@ -157,10 +157,15 @@ public class NotificationMessage {
             ByteArrayOutputStream data = new ByteArrayOutputStream() {
                 {
                     try {
-                        write(new byte[]{(byte) 0x3A, (byte) 0x08}); // Sec 4.1.1.12 of SGP doc
-                        Utils.DGI.appendLen(this, 1 + 1 + 2); // Tag, length...
-                        byte[] s = Utils.encodeInteger(seqNum, 2);
-                        Utils.BER.appendTLV(this, (short) 0x4E, s);
+                        byte[] seqOs = new ByteArrayOutputStream() {{
+                            byte[] s = Utils.encodeInteger(seqNum, 2);
+                            Utils.BER.appendTLV(this,0x4E,s);
+                        }}.toByteArray();
+
+
+                        Utils.BER.appendTLV(this,
+                                new byte[]{0x3A, 0x08}, // Sec 4.1.1.12 of SGP doc
+                            seqOs);
                     } catch (Exception e) {
                     }
                 }

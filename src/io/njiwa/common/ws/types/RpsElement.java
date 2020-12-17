@@ -12,11 +12,14 @@
 
 package io.njiwa.common.ws.types;
 
+import javax.xml.bind.annotation.XmlAccessType;
+import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
 
 /**
  * Created by bagyenda on 04/05/2016.
  */
 @XmlRootElement // So all can inherit
+@XmlAccessorType(XmlAccessType.FIELD)
 public interface RpsElement {
 }

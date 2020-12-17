@@ -40,7 +40,6 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.util.BigIntegers;
 import org.bouncycastle.util.Store;
-import org.jboss.resteasy.util.Hex;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -54,6 +53,9 @@ import javax.xml.bind.Unmarshaller;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.util.StreamReaderDelegate;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
@@ -685,23 +687,22 @@ public class Utils {
         return 0;
     }
 
-    public static String byteSwap(String in)
-    {
+    public static String byteSwap(String in) {
         StringBuilder out = new StringBuilder();
 
-        for (int i = 0; i<in.length(); i+=2)
-        try {
-            out.append(in.charAt(i+1));
-            out.append(in.charAt(i));
-        } catch (Exception ex) {}
+        for (int i = 0; i < in.length(); i += 2)
+            try {
+                out.append(in.charAt(i + 1));
+                out.append(in.charAt(i));
+            } catch (Exception ex) {
+            }
         return out.toString();
     }
-    public static String iccidFromBytes(String in)
-    {
+
+    public static String iccidFromBytes(String in) {
         String out = byteSwap(in);
         // Remove last byte.
-        if (out.length() > 0)
-            out = out.substring(0,out.length()-1);
+        if (out.length() > 0) out = out.substring(0, out.length() - 1);
         return out;
     }
 
@@ -862,24 +863,6 @@ public class Utils {
     public static byte[] getBytes(InputStream in) throws Exception {
         byte[] data = new byte[in.available()];
         in.read(data);
-        return data;
-    }
-
-    public static byte[] readBERorDGI(InputStream in, int expectedTag) throws Exception {
-        int tag;
-        byte[] data;
-        if ((expectedTag & 0xFF00) != 0) {
-            // Expect DGI
-            Pair<Integer, byte[]> x = DGI.decode(in);
-            tag = x.k;
-            data = x.l;
-        } else {
-            Pair<InputStream, Integer> x = BER.decodeTLV(in);
-            tag = x.l;
-            data = getBytes(x.k);
-        }
-        if (tag != expectedTag)
-            throw new Exception("Invalid! Expected Tag " + String.format("%04x", expectedTag) + ", got: " + String.format("%04X", tag));
         return data;
     }
 
@@ -1046,7 +1029,15 @@ public class Utils {
             int secondByte = in.read();
             int tag = ((firstByte << 8)) | (secondByte & 0xff);
 
-            // Now look at length
+            /**
+             * The DGI must be coded on two bytes in binary format,
+             * followed by a length indicator coded as follows: On 1-byte in binary format if the length of data is
+             * from ‘00’ to ‘FE’ (0 to 254 bytes).
+             * On 3-byte with the first byte set to ‘FF’ followed by 2 bytes in binary format from ‘0000’ to ‘FFFE’
+             * (0 to 65 534),
+             * e.g. ‘FF01AF’ indicates a length of 431 bytes.
+             * https://stackoverflow.com/questions/32680437/store-command-to-dgi-0202-is-giving-6a88-error
+             * */
             long len = in.read() & 0xFF;
             if (len == 0xFF) len = BER.decodeInt(in, 2);
             byte[] data = new byte[(int) len];
@@ -1189,6 +1180,7 @@ public class Utils {
             StringWriter w = new StringWriter();
             Transformer t = TransformerFactory.newInstance().newTransformer();
             t.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes"); // XXX right??
+
             t.transform(new DOMSource(node), new StreamResult(w));
             String o = w.toString();
             return o;
@@ -1316,13 +1308,44 @@ public class Utils {
             return w.toString();
         }
 
-        public static <T> T fromXML(String xml, Class<T> cls) throws Exception {
+        public static <T> T fromXML(String xml, Class<T> cls, String defaultNS) throws Exception {
             JAXBContext jc = JAXBContext.newInstance(cls);
             Unmarshaller um = jc.createUnmarshaller();
-            StringReader r = new StringReader(xml);
-
-            T o = (T) um.unmarshal(r);
+            Reader r = new StringReader(xml);
+            T o;
+            if (!isEmpty(defaultNS)) {
+                XMLStreamReader xsr = XMLInputFactory.newFactory().createXMLStreamReader(r);
+                XMLReaderWitNamespaceCorrection xr = new XMLReaderWitNamespaceCorrection(xsr, defaultNS);
+                o = (T) um.unmarshal(xr);
+            } else o = (T) um.unmarshal(r);
             return o;
+        }
+
+        public static <T> T fromXML(String xml, Class<T> cls) throws Exception {
+            return fromXML(xml, cls, null);
+        }
+
+        private static class XMLReaderWitNamespaceCorrection extends StreamReaderDelegate {
+            private String correctNS;
+
+            public XMLReaderWitNamespaceCorrection(XMLStreamReader reader, String ns) {
+                super(reader);
+                correctNS = ns;
+            }
+
+            @Override
+            public String getAttributeNamespace(int arg0) {
+                String origNamespace = super.getAttributeNamespace(arg0);
+                if (isEmpty(origNamespace) && !isEmpty(correctNS)) return correctNS;
+                return origNamespace;
+            }
+
+            @Override
+            public String getNamespaceURI() {
+                String origNamespace = super.getNamespaceURI();
+                if (isEmpty(origNamespace) && !isEmpty(correctNS)) return correctNS;
+                return origNamespace;
+            }
         }
     }
 
@@ -1626,78 +1649,47 @@ public class Utils {
         /**
          * @param os
          * @param tag
-         * @param attr
-         * @param value
-         * @throws Exception
-         * @brief append a BER TL(A)V to the output stream, given the tag, attribute and value
-         */
-        public static void appendTlav(OutputStream os, short tag, int attr, byte[] value) throws Exception {
-            int l = value.length;
-
-            if (attr != 0) {
-                tag |= 0x80; // Put the tag + attr flag
-                l += 1;
-            }
-            os.write(tag);
-            appendTLVlen(os, l);
-            if (attr != 0) os.write(attr);
-            os.write(value);
-        }
-
-        /**
-         * @param os
-         * @param tag
          * @param value
          * @throws Exception
          * @brief append a BER TLV to the output
          */
         public static void appendTLV(OutputStream os, short tag, byte[] value) throws Exception {
-            appendTlav(os, tag, (short) 0, value);
+            appendTLV(os, new byte[]{(byte) tag}, value);
         }
 
-        /**
-         * @param os
-         * @param is_tlav
-         * @param allow_ff
-         * @return
-         * @throws Exception
-         * @brief Decode a BER TL(A)V
-         * XXX There is a discrepancy in SGP's use of TAG 9F85 in a response TLV in SCP03t -- how?!
-         */
-        public static Quad<InputStream, Integer, Integer, Boolean> decodeTlav(InputStream os, boolean is_tlav,
-                                                                              boolean allow_ff) throws Exception {
+        public static void appendTLV(OutputStream os, byte[] tag, byte[] value) throws Exception {
+            int l = value.length;
+            os.write(tag);
+            appendTLVlen(os, l);
+            os.write(value);
+        }
 
-            if (os.available() < 1) throw new Exception("Insufficient data");
+        public static Pair<InputStream, Integer> decodeTLV(InputStream os, boolean twoByteTag) throws Exception {
             int tag = os.read() & 0xFF;
-            int len = 0, attr = 0;
-            boolean had_ff = false;
+
+            if (twoByteTag) {
+                int b2 = os.read() & 0xFF;
+                tag = (tag << 8) | b2;
+            }
+            int len = 0;
             try {
-                Pair<Integer, Boolean> p = decodeTLVLen(os, allow_ff);
-                len = p.k; // If given.
-                had_ff = p.l;
-                if (len < 0) tag = -1;
+                len = decodeTLVLen(os);
+                if (len < 0)
+                    tag = -1;
             } catch (Exception ex) {
                 tag = -1;
             }
 
-            if (is_tlav && (tag & 0x80) != 0) {
-                // Get the attribute.
-                attr = os.read() & 0xFF;
-                tag &= 0x7F; // Clear top bit.
-                len--; // Reduce length.
-            }
             // now get the value
             byte[] out = new byte[len > 0 ? len : 0];
 
             int xlen = os.read(out); // Unless input is mal-formed, we should get this many bytes.
 
-
-            return new Quad<>(new ByteArrayInputStream(out, 0, xlen), tag, attr, had_ff);
+            return new Pair<>(new ByteArrayInputStream(out, 0, xlen), tag);
         }
 
         public static Pair<InputStream, Integer> decodeTLV(InputStream os) throws Exception {
-            Quad<InputStream, Integer, Integer, Boolean> p = decodeTlav(os, false, false);
-            return new Pair<>(p.k, p.l);
+            return decodeTLV(os, false);
         }
 
         public static Pair<Integer, byte[]> decodeTLV(String data) throws Exception {
@@ -1737,6 +1729,35 @@ public class Utils {
         public static List<Pair<Integer, byte[]>> decodeTLVs(byte[] data) throws Exception {
             return decodeTLVs(new ByteArrayInputStream(data));
         }
+
+        public static void appendTLV(OutputStream os, int tag, byte[] data) throws Exception {
+            byte[] xtag = new byte[]{(byte) ((tag >> 8) & 0xFF), (byte) (tag & 0xFF)};
+
+            appendTLV(os, xtag, data);
+        }
+
+        public static byte[] decodeTLV(InputStream in, short expectedTag) throws Exception {
+            return decodeTLV(in, new byte[]{(byte)expectedTag});
+        }
+
+        public static byte[] decodeTLV(InputStream in, byte[] expectedTag) throws Exception {
+            byte[] data;
+
+            byte[] xtag = new byte[expectedTag.length];
+
+            in.read(xtag);
+
+
+            if (!Arrays.equals(xtag, expectedTag))
+                throw new Exception("Invalid! Expected Tag " + HEX.h2b(expectedTag) + ", got: " + HEX.b2H(xtag));
+
+            int len = decodeTLVLen(in);
+            data = new byte[len];
+            in.read(data);
+            return data;
+        }
+
+
     }
 
     /**
@@ -1889,7 +1910,8 @@ public class Utils {
                     boolean path_matches = path.toLowerCase().startsWith(c.path.toLowerCase());
                     boolean wildcard_domain = c.domain.charAt(0) == '.' && c.domain.indexOf('.', 1) > 0;
                     boolean domains_match = domain != null && domainMatches(domain, c.domain);
-                    boolean suffix_match = domains_match && ((r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0);
+                    boolean suffix_match =
+                            domains_match && ((r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0);
 
                     if (path_matches && (explicit_domain == false || wildcard_domain && domains_match && suffix_match))
                         res.add(c); // Add it
@@ -2056,7 +2078,8 @@ public class Utils {
          * @brief This represents a standard MIME/HTTP Message type
          */
         private static abstract class Message {
-            private static final boolean USE_CHUNKED_IN_OUTPUT = true; //!< Spec says we must use chunked response format
+            private static final boolean USE_CHUNKED_IN_OUTPUT = true; //!< Spec says we must use chunked response
+            // format
             public byte[] body = null; //!< The message body
             public Map<String, String> headers = new HashMap<>(); //!< The message headers
             public double version = 1.0; //!< The HTTP Version
@@ -2194,8 +2217,7 @@ public class Utils {
                         String.format("Http Incoming Transfer-Encoding Header: %s", value);
                         chunked = value.toLowerCase().contains("chunked");
                         chunkedHeaderSeen = chunked;
-                    } else
-                        headers.put(header, value);
+                    } else headers.put(header, value);
 
                 }
 
@@ -2216,16 +2238,13 @@ public class Utils {
             private void readBody(InputStream in) throws Exception {
                 // Body follows.
                 String s;
-                if (!hasBody())
-                    bodyLen = 0; // Regardless
+                if (!hasBody()) bodyLen = 0; // Regardless
                 else if (chunked) {
                     // Read chunked: Sec 3.6.1 of the RFC
                     int len;
                     byte[] trailer = new byte[2];
                     ByteArrayOutputStream xos = new ByteArrayOutputStream();
-                    while ((s = readLine(in)) != null &&
-                            !s.trim().isEmpty() &&
-                            (len = getChunkSize(s)) > 0) {
+                    while ((s = readLine(in)) != null && !s.trim().isEmpty() && (len = getChunkSize(s)) > 0) {
                         byte[] data = readBytes(in, len);
                         xos.write(data); // Read each chunk, append it.
                         // Read trailer
@@ -2247,9 +2266,7 @@ public class Utils {
                         readLine(in); // Remove the last CRLF
                     }
 
-                }
-                else
-                    body = readBytes(in, bodyLen);
+                } else body = readBytes(in, bodyLen);
 
                 Utils.lg.info(String.format("HTTP server, body received: %s", HEX.b2H(body)));
             }
@@ -2323,7 +2340,7 @@ public class Utils {
                     xos.write(pre);
                     xos.write(body);
                     xos.write(post);
-                    
+
                     xos.write("0\r\n\r\n".getBytes(StandardCharsets.UTF_8)); // Last chunk, write...
                 }
 
@@ -2496,8 +2513,7 @@ public class Utils {
                 int code = status.getStatusCode();
                 boolean t = (code / 100 != 1) && (code != 204) && (code != 304);
                 // Process chunked.
-                if (!contentLengthSeen)
-                    chunked = true; // Sec 2.4.4.2 of SGP 02 v4.1
+                if (!contentLengthSeen) chunked = true; // Sec 2.4.4.2 of SGP 02 v4.1
                 return t;
             }
 
@@ -2519,7 +2535,7 @@ public class Utils {
              * @brief The first line is always of the form VERSION STATUS [STATUS_MESSAGE]
              */
             @Override
-            protected void parseStartLine(String line){
+            protected void parseStartLine(String line) {
                 String[] xl = line.split("\\s+", 3);
 
                 parseVersionFromProtocol(xl[0]);

@@ -145,52 +145,50 @@ public class ES2Impl {
                         statusCode), eis);
     }
 
-    private Euicc findOrFetchEIS(final RpaEntity smsr, final String eid, final boolean forceGetEIS) {
+    private Euicc findOrFetchEIS(final RpaEntity smsr, final String eid) {
         Euicc xeuicc = po.doTransaction((po, em) -> Euicc.findByEID(em, eid));
-        Eis eis = xeuicc  != null ? xeuicc.eis : null;
+        Eis eis;
 
-        if (xeuicc == null || forceGetEIS) {
-            eis = ES2Client.getEIS(po, smsr, eid);
-            if (eis != null && xeuicc == null) {
-                // Make a new one and save it.
-                final Eis.SecurityDomain ecasd = eis.signedInfo.ecasd;
+        eis = ES2Client.getEIS(po, smsr, eid);
+        if (eis != null) {
+            // Make a new one and save it.
+            final Eis.SecurityDomain ecasd = eis.signedInfo.ecasd;
 
-                byte[] ecasd_pKey = null;
-                int ecasd_pref = 0;
-                // Find ecasd pub key and key param
-                try {
+            byte[] ecasd_pKey = null;
+            int ecasd_pref = 0;
+            // Find ecasd pub key and key param
+            try {
 
-                    for (Eis.SecurityDomain.KeySet k : ecasd.keySets)
-                        if (k.type == Eis.SecurityDomain.KeySet.Type.CA) {
+                for (Eis.SecurityDomain.KeySet k : ecasd.keySets)
+                    if (k.type == Eis.SecurityDomain.KeySet.Type.CA) {
 
-                            // Go over the keysets, look for the one we want
-                            try {
-                                for (Eis.SecurityDomain.KeySet.Certificate c : k.certificates) {
-                                    Certificate.Data d = Certificate.Data.decode(c.value);
-                                    if (d.keyUsage == d.KEYAGREEMENT) {
-                                        ecasd_pKey = d.publicKeyQ;
-                                        ecasd_pref = d.publicKeyReferenceParam;
-                                        break;
-                                    }
+                        // Go over the keysets, look for the one we want
+                        try {
+                            for (Eis.SecurityDomain.KeySet.Certificate c : k.certificates) {
+                                Certificate.Data d = Certificate.Data.decode(c.value);
+                                if (d.keyUsage == d.KEYAGREEMENT) {
+                                    ecasd_pKey = d.publicKeyQ;
+                                    ecasd_pref = d.publicKeyReferenceParam;
+                                    break;
                                 }
-                            } catch (Exception ex) {
                             }
-                            break;
+                        } catch (Exception ex) {
                         }
-                } catch (Exception ex) {
-                }
-                xeuicc = new Euicc(eid, smsr.getOid(), new ArrayList<ISDP>());
-                xeuicc.setEcasd_public_key_param_ref(ecasd_pref);
-                xeuicc.setEcasd_public_key_q(ecasd_pKey);
-                // Store them for future reference
-                xeuicc.setIsdR_sdin(eis.isdR.sdin);
-                xeuicc.setIsdR_sin(eis.isdR.sin);
-
-                final Euicc xeuicc1 = xeuicc;
-                // Store to db.
-                po.doTransaction((po,em) -> {em.persist(xeuicc1); return true;});
-
+                        break;
+                    }
+            } catch (Exception ex) {
             }
+            xeuicc = new Euicc(eid, smsr.getOid(), new ArrayList<ISDP>());
+            xeuicc.setEcasd_public_key_param_ref(ecasd_pref);
+            xeuicc.setEcasd_public_key_q(ecasd_pKey);
+            // Store them for future reference
+            xeuicc.setIsdR_sdin(eis.isdR.sdin);
+            xeuicc.setIsdR_sin(eis.isdR.sin);
+
+            final Euicc xeuicc1 = xeuicc;
+            // Store to db.
+            po.doTransaction((po,em) -> {em.persist(xeuicc1); return true;});
+
         }
 
         if (xeuicc != null)
@@ -228,7 +226,7 @@ public class ES2Impl {
 
                                                    @WebParam(name = "Eid")
                                                    final String eid,
-                                                   @WebParam(name = "Smsr-id")
+                                                   @WebParam(name = "Smsr-Id")
                                                    final String smsrId,
 
                                                    @WebParam(name = "ProfileType")
@@ -251,7 +249,7 @@ public class ES2Impl {
             return new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(), new
                     BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType
                     .ExecutionStatus.StatusCode("8.7", "3.9", "SMS-SR", "Unknown SM-SR")), null);
-        final Euicc euicc = findOrFetchEIS(smsr, eid, true);
+        final Euicc euicc = findOrFetchEIS(smsr, eid);
         Eis eis = euicc != null ? euicc.eis : null;
         if (eis == null)
             return new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(), new
@@ -264,41 +262,26 @@ public class ES2Impl {
                     .ExecutionStatus.StatusCode("8.1.1", "3.9", "EID", "No ECASD Cert")), null);
 
         // Look for profile
-        final ProfileTemplate profile;
-        boolean byICCID;
-        if (profileIccid != null) {
-            profile = po.doTransaction(new PersistenceUtility.Runner<ProfileTemplate>() {
-                @Override
-                public ProfileTemplate run(PersistenceUtility po, EntityManager em) throws Exception {
-                    return ProfileTemplate.findByICCID(em, profileIccid, sender.getId());
-                }
-
-                @Override
-                public void cleanup(boolean success) {
-
-                }
-            });
+        ProfileTemplate profile;
+        boolean byICCID = false;
+        DownloadProfileResponse resp = null;
+        if (!Utils.isEmpty( profileIccid)) {
+            profile = po.doTransaction((po, em) -> ProfileTemplate.findByICCID(em, profileIccid, sender.getId()));
             if (profile == null)
-                return new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(), new
+                resp = new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(), new
                         BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType
                         .ExecutionStatus.StatusCode("8.2.1", "3.9", "Profile ICCID", "Unknown Profile ICCID")), null);
             byICCID = true;
-        } else {
-            profile = po.doTransaction(new PersistenceUtility.Runner<ProfileTemplate>() {
-                @Override
-                public ProfileTemplate run(PersistenceUtility po, EntityManager em) throws Exception {
-                    return ProfileTemplate.findByType(em, profileType, sender.getId());
-                }
+        }  else
+            profile = null;
 
-                @Override
-                public void cleanup(boolean success) {
-
-                }
-            });
+        if (profile == null && !Utils.isEmpty(profileType)) {
+            profile = po.doTransaction((po, em) -> ProfileTemplate.findByType(em, profileType, sender.getId()));
             byICCID = false;
         }
+
         if (profile == null)
-            return new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(), new
+            return resp != null ? resp : new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(), new
                     BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType
                     .ExecutionStatus.StatusCode("8.2.5", "3.9", "Profile Type", "Unknown Profile Type")), null);
 
@@ -337,29 +320,26 @@ public class ES2Impl {
                                 "required")), null);
         }
         // Now we need to create the transaction
-        SmDpTransaction trObj = po.doTransaction(new PersistenceUtility.Runner<SmDpTransaction>() {
-            @Override
-            public SmDpTransaction run(PersistenceUtility po, EntityManager em) throws Exception {
-                // Make ISDP
-                ISDP xisdp = new ISDP(euicc, sender.getOid(), profile);
-                List<ISDP> l = euicc.getIsdps();
-                if (l == null)
-                    l = new ArrayList<ISDP>();
-                l.add(xisdp);
-                euicc.setIsdps(l);
-                em.persist(xisdp);
-                DownloadProfileTransaction trObj = new DownloadProfileTransaction(em, profile, euicc, smsr
-                        .getId(),
-                        enableProfile);
-                trObj.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo, Authenticator
-                        .getUser(context).getId());
-                SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
-                tr.setIsdp(xisdp); // Record it.
-                em.persist(tr);
-                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
-                return tr;
-            }
-
+        final ProfileTemplate xprofile = profile;
+        SmDpTransaction trObj = po.doTransaction((po, em) -> {
+            // Make ISDP
+            ISDP xisdp = new ISDP(euicc, sender.getOid(), xprofile);
+            List<ISDP> l = euicc.getIsdps();
+            if (l == null)
+                l = new ArrayList<ISDP>();
+            l.add(xisdp);
+            euicc.setIsdps(l);
+            em.persist(xisdp);
+            DownloadProfileTransaction trObj1 = new DownloadProfileTransaction(em, xprofile, euicc, smsr
+                    .getId(),
+                    enableProfile);
+            trObj1.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo, Authenticator
+                    .getUser(context).getId());
+            SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj1);
+            tr.setIsdp(xisdp); // Record it.
+            em.persist(tr);
+            // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+            return tr;
         });
 
         if (trObj == null)
@@ -369,8 +349,8 @@ public class ES2Impl {
                     "Profile Type",
                     "Data preparation failed")), null);
 
-        HttpServletResponse resp = WSUtils.getRespObject(context);
-        resp.sendError(Response.Status.ACCEPTED.getStatusCode(), ""); // Tell sender we are going to reply.
+        HttpServletResponse httpResp = WSUtils.getRespObject(context);
+        httpResp.sendError(Response.Status.ACCEPTED.getStatusCode(), ""); // Tell sender we are going to reply.
         return null;
     }
 
@@ -425,7 +405,7 @@ public class ES2Impl {
             return new EnableProfileResponse(startDate, Calendar.getInstance().getTime(), new
                     BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType
                     .ExecutionStatus.StatusCode("8.7", "3.9", "SMS-SR", "Unknown SM-SR")));
-        final Euicc euicc = findOrFetchEIS(smsr, eid, true);
+        final Euicc euicc = findOrFetchEIS(smsr, eid);
         Eis eis = euicc != null ? euicc.eis : null;
         if (eis == null)
             return new EnableProfileResponse(startDate, Calendar.getInstance().getTime(), new
@@ -516,7 +496,7 @@ public class ES2Impl {
             return new DisableProfileResponse(startDate, Calendar.getInstance().getTime(), new
                     BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType
                     .ExecutionStatus.StatusCode("8.7", "3.9", "SMS-SR", "Unknown SM-SR")));
-        final Euicc euicc = findOrFetchEIS(smsr, eid, true);
+        final Euicc euicc = findOrFetchEIS(smsr, eid);
         Eis eis = euicc != null ? euicc.eis : null;
         if (eis == null)
             return new DisableProfileResponse(startDate, Calendar.getInstance().getTime(), new
@@ -601,7 +581,7 @@ public class ES2Impl {
             return new BaseResponseType(startDate, Calendar.getInstance().getTime(), validityPeriod,
                     new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType
                             .ExecutionStatus.StatusCode("8.7", "3.9", "SMS-SR", "Unknown SM-SR")));
-        final Euicc euicc = findOrFetchEIS(smsr, eid, true);
+        final Euicc euicc = findOrFetchEIS(smsr, eid);
         Eis eis = euicc != null ? euicc.eis : null;
         if (eis == null)
             return new BaseResponseType(startDate,Calendar.getInstance().getTime(),validityPeriod,
@@ -689,7 +669,7 @@ public class ES2Impl {
             return new DeleteProfileResponse(startDate, Calendar.getInstance().getTime(), new
                     BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed, new BaseResponseType
                     .ExecutionStatus.StatusCode("8.7", "3.9", "SMS-SR", "Unknown SM-SR")));
-        final Euicc euicc = findOrFetchEIS(smsr, eid, true);
+        final Euicc euicc = findOrFetchEIS(smsr, eid);
         Eis eis = euicc != null ? euicc.eis : null;
         if (eis == null)
             return new DeleteProfileResponse(startDate, Calendar.getInstance().getTime(), new

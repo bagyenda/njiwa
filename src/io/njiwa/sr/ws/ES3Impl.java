@@ -109,7 +109,8 @@ public class ES3Impl {
 
                                      @WebParam(name = "ValidityPeriod") long validityPeriod,
 
-                                     @WebParam(name = "Eid") final String eid, @WebParam(name = "RelatesTo", mode =
+                                     @WebParam(name = "Eid") final String eid,
+                                     @WebParam(name = "RelatesTo", mode =
             WebParam.Mode.OUT, header = true, targetNamespace = "http://www.w3.org/2007/05/addressing/metadata") Holder<String> relatesTo) throws Exception {
 
         Date startDate = Calendar.getInstance().getTime();

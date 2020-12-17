@@ -109,19 +109,9 @@ public class ES1Impl {
             String signature = ES1SignatureVerifyHandler.getSignatureXML(context.getMessageContext());
             // Make model.EIS and save
             final io.njiwa.sr.model.Eis eisObj = eis.toModel(signedInfo,signature);
-            po.doTransaction(new PersistenceUtility.Runner<Object>() {
-                @Override
-                public Object run(PersistenceUtility po, EntityManager em) throws Exception {
-                    em.persist(eisObj);
-                 //   em.flush();
-                    return true;
-                }
-
-                @Override
-                public void cleanup(boolean success) {
-                    // Set status
-                    statusCode.reasonCode = "4.2";
-                }
+            po.doTransaction((PersistenceUtility.Runner<Object>) (po, em) -> {
+                em.persist(eisObj);
+                return true;
             });
         } catch (Exception ex) {
             status = BaseResponseType.ExecutionStatus.Status.Failed;

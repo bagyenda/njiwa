@@ -13,27 +13,19 @@
 package io.njiwa.common.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import io.njiwa.common.ServerSettings;
 import io.njiwa.common.Utils;
-import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
-import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.openssl.PEMKeyPair;
-import org.bouncycastle.openssl.PEMParser;
-import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
 import javax.persistence.*;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.security.PrivateKey;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509CRL;
-import java.security.cert.X509Certificate;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.PushbackInputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import static io.njiwa.common.ECKeyAgreementEG.*;
 
 /**
  * Created by bagyenda on 20/04/2016.
@@ -137,67 +129,45 @@ public class Certificate {
 
         public byte[] signature;
 
-        public byte[] makeCertificateSigData() {
-            try {
-                // We assume Table 11-3 of GPC UICC Configuration v1.0
-                return new ByteArrayOutputStream() {
-                    {
-                        Utils.DGI.append(this, 0x7F49, publicKeyFull);
-                        Utils.BER.appendTLV(this, (short) 0x93, Utils.HEX.h2b(serial));
-                        Utils.BER.appendTLV(this, (short) 0x42, Utils.HEX.h2b(CaIIN));
-                        Utils.DGI.append(this, 0x5F20, Utils.HEX.h2b(subjectIdentifier));
-                        if (effectiveDate != null)
-                            Utils.DGI.append(this, 0x5F25,
-                                    Utils.HEX.h2b(new SimpleDateFormat("yyyyMMdd").format(effectiveDate)));
-                        Utils.DGI.append(this, 0x5F24,
-                                Utils.HEX.h2b(new SimpleDateFormat("yyyyMMdd").format(expireDate)));
-                        if (discretionaryData != null) Utils.BER.appendTLV(this, (short) 0x53, discretionaryData);
-                    }
-                }.toByteArray();
-            } catch (Exception ex) {
-            }
-            return null;
-        }
-
         /**
          * @param data
          * @return
          * @throws Exception
-         * @ brief decode as per Table 23,24 of SGP v3.1
+         * @brief decode as per Table 23,24 of SGP.02 v4.2. According to GPC Ammendment A, this data is TLV encoded.
+         * Some items have two-byte tags.
          */
         public static Data decode(String data) throws Exception {
             Data d = new Data();
             ByteArrayInputStream inputStream = new ByteArrayInputStream(Utils.HEX.h2b(data));
-            byte[] x = Utils.readBERorDGI(inputStream, 0x7F21);
+            byte[] x = Utils.BER.decodeTLV(inputStream, GPC_A_CERTIFICATE_TAG);
 
             ByteArrayInputStream xin = new ByteArrayInputStream(x);
             PushbackInputStream in = new PushbackInputStream(xin);
             while (in.available() > 0) {
                 in.mark(1);
                 int ch = 0xFF & in.read();
-                in.unread(ch); // Put it back
+
+                in.reset(); // Go back...
                 byte[] xdata;
                 int tag;
 
-                if (ch == 0x5F || ch == 0x7F) {
-                    Utils.Pair<Integer, byte[]> xres = Utils.DGI.decode(in);
-                    xdata = xres.l;
-                    tag = xres.k;
-                } else {
-                    Utils.Pair<InputStream, Integer> xres = Utils.BER.decodeTLV(in);
-                    xdata = Utils.getBytes(xres.k);
-                    tag = xres.l;
-                }
+                /**
+                 * Look for 5F25, 5F24, 5F20, 5F37 and 7F49 TLVs first.
+                 */
+                boolean twoByteTag = (ch == 0x5F || ch == 0x7F);
+
+                Utils.Pair<InputStream, Integer> xres = Utils.BER.decodeTLV(in, twoByteTag);
+                xdata = Utils.getBytes(xres.k);
+                tag = xres.l;
+
                 switch (tag) {
                     case 0x93:
                         d.serial = Utils.HEX.b2H(xdata);
                         break;
                     case 0x42:
-
                         d.CaIIN = Utils.HEX.b2H(xdata);
                         break;
                     case 0x5F20:
-
                         d.subjectIdentifier = Utils.HEX.b2H(xdata);
                         break;
                     case 0x95:
@@ -231,8 +201,8 @@ public class Certificate {
                         xin = new ByteArrayInputStream(xdata);
                         try {
                             // Parse public key
-                            d.publicKeyQ = Utils.readBERorDGI(xin, 0xB0);
-                            d.publicKeyReferenceParam = Utils.readBERorDGI(xin, 0xF0)[0]; // Read the key ref param
+                            d.publicKeyQ = Utils.BER.decodeTLV(xin, (short)0xB0);
+                            d.publicKeyReferenceParam = Utils.BER.decodeTLV(xin, (short)0xF0)[0]; // Read the key ref param
                         } catch (Exception ex) {
                         }
                         break;
@@ -249,6 +219,28 @@ public class Certificate {
                 }
             }
             return d;
+        }
+
+        public byte[] makeCertificateSigData() {
+            try {
+                // We assume Table 11-3 of GPC UICC Configuration v1.0
+                return new ByteArrayOutputStream() {
+                    {
+                        Utils.BER.appendTLV(this, SGP02_PUBLIC_KEY_TAG, publicKeyFull);
+                        Utils.BER.appendTLV(this, (short) 0x93, Utils.HEX.h2b(serial));
+                        Utils.BER.appendTLV(this, (short) 0x42, Utils.HEX.h2b(CaIIN));
+                        Utils.BER.appendTLV(this, GPC_A_SUBJECT_IDENTIFIER_TAG, Utils.HEX.h2b(subjectIdentifier));
+                        if (effectiveDate != null)
+                            Utils.BER.appendTLV(this, GPC_A_CERT_EFFECTIVE_DATE_TAG,
+                                    Utils.HEX.h2b(new SimpleDateFormat("yyyyMMdd").format(effectiveDate)));
+                        Utils.BER.appendTLV(this, GPC_A_CERT_EXPIRY_DATE_TAG, Utils.HEX.h2b(new SimpleDateFormat(
+                                "yyyyMMdd").format(expireDate)));
+                        if (discretionaryData != null) Utils.BER.appendTLV(this, (short) 0x53, discretionaryData);
+                    }
+                }.toByteArray();
+            } catch (Exception ex) {
+            }
+            return null;
         }
     }
 

@@ -39,7 +39,6 @@ public final class ES2Client {
     public static GetEISResponse getEIS(EntityManager em, RpaEntity smsr, String
             relatesTo, String eid) {
 
-
         WsaEndPointReference xto = new WsaEndPointReference(smsr,"ES3");
         String to = xto.makeAddress();
 
@@ -197,14 +196,7 @@ public final class ES2Client {
 
     public static Eis getEIS(PersistenceUtility po, final RpaEntity smsr, final String eid) {
         try {
-            return po.doTransaction(new PersistenceUtility.Runner<Eis>() {
-                @Override
-                public Eis run(PersistenceUtility po, EntityManager em) throws Exception {
-                    return getEIS(em, smsr, UUID.randomUUID().toString(), eid).eis;
-                }
-
-
-            });
+            return po.doTransaction((po1, em) -> getEIS(em, smsr, UUID.randomUUID().toString(), eid).eis);
         } catch (Exception ex) {
         }
         return null;

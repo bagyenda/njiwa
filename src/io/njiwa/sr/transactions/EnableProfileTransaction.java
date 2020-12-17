@@ -54,9 +54,7 @@ public class EnableProfileTransaction extends SmSrBaseTransaction implements Pro
                 ByteArrayOutputStream os = new ByteArrayOutputStream();
                 try {
                     Utils.BER.appendTLV(os, (short) 0x4F, Utils.HEX.h2b(aid));
-                    write(new byte[]{(byte) 0x3A, (byte) 0x03});
-                    Utils.DGI.appendLen(this, os.size());
-                    write(os.toByteArray());
+                   Utils.BER.appendTLV(this, new byte[]{(byte) 0x3A, (byte) 0x03}, os.toByteArray());
                 } catch (Exception ex) {
                 }
 

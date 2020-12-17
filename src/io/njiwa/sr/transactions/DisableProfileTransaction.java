@@ -48,14 +48,13 @@ public class DisableProfileTransaction extends SmSrBaseTransaction implements Pr
         int ins = 0xe2, p1 = 0x88, p2 = 0;
         ByteArrayOutputStream data = new ByteArrayOutputStream() {
             {
-                // According to Sec 4.1.1.2 of SGP 03 v3.0
+                // According to Sec 4.1.1.2 of SGP 03 v4.2, Table 13
                 String aid = p.getIsd_p_aid();
                 ByteArrayOutputStream os = new ByteArrayOutputStream();
                 try {
                     Utils.BER.appendTLV(os, (short) 0x4F, Utils.HEX.h2b(aid));
-                    write(new byte[]{(byte) 0x3A, (byte) 0x04});
-                    Utils.DGI.appendLen(this, os.size());
-                    write(os.toByteArray());
+                     Utils.BER.appendTLV (this, new byte[]{(byte) 0x3A, (byte) 0x04},
+                             os.toByteArray());
                 } catch (Exception ex) {
                 }
 

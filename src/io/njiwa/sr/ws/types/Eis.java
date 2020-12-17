@@ -18,6 +18,7 @@ import io.njiwa.common.model.KeyComponent;
 import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.ws.types.RpsElement;
+import io.njiwa.sr.model.SecurityDomain;
 
 import javax.xml.bind.annotation.*;
 import javax.xml.datatype.DatatypeFactory;
@@ -133,8 +134,10 @@ public class Eis implements RpsElement {
 
     public static Eis fromModel(io.njiwa.sr.model.Eis mEis) throws Exception {
         Eis eis = new Eis();
-        eis.signedInfo = Utils.XML.fromXML(mEis.getSignedInfoXML(), EumSignedInfo.class);
-        eis.sig = Utils.XML.fromXML(mEis.getSignatureXML(), Signature.class);
+        // Parse it with name space, since we may not have the ns on the EIS stuff...
+        eis.signedInfo = EumSignedInfo.fromEis(mEis); // Utils.XML.fromXML(mEis.getSignedInfoXML(), EumSignedInfo.class,
+               // "http://namespaces.gsma.org/esim-messaging/1");
+        eis.sig = Utils.XML.fromXML(mEis.getSignatureXML(), Signature.class,"http://www.w3.org/2000/09/xmldsig#");
 
         eis.remainingMemory = mEis.getRemainingMemory();
         eis.availableMemoryForProfiles = mEis.getAvailableMemoryForProfiles();
@@ -210,7 +213,9 @@ public class Eis implements RpsElement {
                 smsrId,
                 signedInfo.isdPLoadFileAid,
                 signedInfo.isdPModuleAid,
-                signedInfo.euiCCCapabilities, xmlSignature, xmlSignedInfo,
+                signedInfo.euiCCCapabilities,
+                xmlSignature,
+                xmlSignedInfo,
                 securityDomainList);
 
         // Do properties and audit trail
@@ -226,7 +231,8 @@ public class Eis implements RpsElement {
         return eis;
     }
 
-    @XmlRootElement(namespace = "http://namespaces.gsma.org/esim-messaging/1")
+    @XmlRootElement(namespace = "http://namespaces.gsma.org/esim-messaging/1", name = "EumSignedInfo")
+    @XmlAccessorType(XmlAccessType.FIELD)
     public static class EumSignedInfo implements RpsElement {
 
         @XmlElement(name = "Eid")
@@ -256,7 +262,34 @@ public class Eis implements RpsElement {
         @XmlElement(name = "EuiccCapabilities")
         public EuiCCCapabilities euiCCCapabilities;
 
+        public EumSignedInfo() {}
+        public static EumSignedInfo fromEis(io.njiwa.sr.model.Eis eis) throws  Exception {
+            EumSignedInfo s = new EumSignedInfo();
+            s.eid = eis.getEid();
+            s.productionDate = Utils.gregorianCalendarFromDate(eis.getProductionDate()).toString();
+            s.platformType = eis.getPlatformType();
+            s.platformType = eis.getPlatformType();
+            s.platformVersion = eis.getPlatformVersion();
+            s.isdPLoadFileAid = eis.getIsd_p_loadfile_aid();
+            s.isdPModuleAid = eis.getIsd_p_module_aid();
+            s.euiCCCapabilities = new EuiCCCapabilities();
 
+            s.euiCCCapabilities.cattpSupport = eis.getCat_tp_support();
+            s.euiCCCapabilities.cattpVersion = eis.getCat_tp_version();
+            s.euiCCCapabilities.httpSupport = eis.hasHttpSupport();
+            s.euiCCCapabilities.httpVersion = eis.getHttp_version();
+            s.euiCCCapabilities.remoteProvisioningVersion  = eis.getRemote_provisioning_version();
+            s.euiCCCapabilities.securePacketVersion = eis.getSecure_packet_version();
+
+            // get ecasd
+            for (io.njiwa.sr.model.SecurityDomain sd: eis.getSdList())
+                if (sd.getRole() == io.njiwa.sr.model.SecurityDomain.Role.ECASD) {
+                    s.ecasd = SecurityDomain.fromModel(sd);
+                    break;
+                }
+
+            return s;
+        }
     }
 
     @XmlRootElement(namespace = "http://namespaces.gsma.org/esim-messaging/1")

@@ -32,6 +32,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static io.njiwa.common.ECKeyAgreementEG.SGP02_PUBLIC_KEY_TAG;
+
 /**
  * Make a  SCP81 key in the ISDR according to GPC Ammend A&E
  */
@@ -87,7 +89,7 @@ public class CreateSCP81KeySet extends SmSrBaseTransaction {
         addAPDU(new SDCommand.APDU(0x80, 0xE2, 0x89, 0x01, new ByteArrayOutputStream() {
             {
                 write(a6);
-                Utils.DGI.append(this, 0x7F49, epkVal);
+                Utils.BER.appendTLV(this, SGP02_PUBLIC_KEY_TAG, epkVal);
             }
         }.toByteArray()));
     }

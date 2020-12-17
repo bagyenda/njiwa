@@ -52,6 +52,14 @@ public class ECKeyAgreementEG {
     private static final String AUTHORITY_KEY_IDENTIFIER_OID = "2.5.29.35";
     public static final int SM_SR_CERTIFICATE_TYPE = 0x02; // Table 39 of SGP.02 v4.1
     public static final int SM_DP_CERTIFICATE_TYPE = 0x01; // Table 77 of SGP.02 v4.1
+    public static final byte[] GPC_A_CERTIFICATE_TAG = {(byte) 0x7F, (byte) 0x21};
+    public static final byte[] GPC_A_SIGNATURE_TAG = {(byte) 0x5F, (byte) 0x37};
+    public static final byte[] SGP02_CERTIFICATE_OF_OFFCARD_ENTITY_TAG = {(byte) 0x3A, (byte) 0x01};
+    public static final byte[] SGP02_KEY_ESTABLISHMENT_TAG = {0x3A, 0x02};
+    public static final byte[] SGP02_PUBLIC_KEY_TAG = {0x7F, 0x49};
+    public static final byte[] GPC_A_SUBJECT_IDENTIFIER_TAG = {0x5F, 0x20};
+    public static final byte[] GPC_A_CERT_EFFECTIVE_DATE_TAG = {0x5F, 0x25};
+    public static final byte[] GPC_A_CERT_EXPIRY_DATE_TAG = {0x5F, 0x24};
 
     //1. To generate the ephemeral keys, we We follow this (except for the KDF bit): https://neilmadden.wordpress
     // .com/2016/05/20/ephemeral-elliptic-curve-diffie-hellman-key-agreement-in-java/
@@ -159,11 +167,20 @@ public class ECKeyAgreementEG {
 
         return new SDCommand.APDU(0x80, 0xE2, 0x09, 0x00, new ByteArrayOutputStream() {
             {
-                Utils.DGI.append(this, 0x3A01, signedCert);
+                Utils.BER.appendTLV(this, SGP02_CERTIFICATE_OF_OFFCARD_ENTITY_TAG, signedCert);
             }
         }.toByteArray()); // XXX Might be a long command.
     }
 
+    /**
+     * @brief: Make the send certificate data. According to GPC Ammendment A Sec 3.3.2, the dat must be TLV encoded.
+     * @param cert
+     * @param certificate_type
+     * @param discretionaryData
+     * @param sig
+     * @return
+     * @throws Exception
+     */
     public static SDCommand.APDU isdKeySetEstablishmentSendCert(X509Certificate cert, int certificate_type, byte[] discretionaryData, final byte[] sig)
             throws Exception {
         // Make the data: Table 77 of SGP.02 v4.1
@@ -172,14 +189,14 @@ public class ECKeyAgreementEG {
         final byte[] certData = new ByteArrayOutputStream() {
             {
                 write(sigdata);
-                Utils.DGI.append(this, 0x5F37, sig);
+                Utils.BER.appendTLV(this, GPC_A_SIGNATURE_TAG, sig);
             }
         }.toByteArray();
 
         // Make top-level
         final byte[] xdata = new ByteArrayOutputStream() {
             {
-                Utils.DGI.append(this, 0x7F21, certData);
+                Utils.BER.appendTLV(this, GPC_A_CERTIFICATE_TAG,certData);
             }
         }.toByteArray();
 
@@ -330,14 +347,12 @@ public class ECKeyAgreementEG {
         //Make the signable object, Table 81 or SGP v3.1
         ByteArrayOutputStream os = new ByteArrayOutputStream() {
             {
-                Utils.DGI.append(this, 0x3A02, a6crt);
-                // Make public key DGI
-
-                Utils.DGI.append(this, 0x7F49, ePk);
+                Utils.BER.appendTLV(this, SGP02_KEY_ESTABLISHMENT_TAG, a6crt);
+                Utils.BER.appendTLV(this, SGP02_PUBLIC_KEY_TAG, ePk);
             }
         };
         // Make signing data and sign it
-        Utils.DGI.append(os, 0x0085, randomChallenge);
+        Utils.BER.appendTLV(os,  new byte[] { 0x00, (byte)0x85}, randomChallenge);
         final byte[] sig = Utils.ECC.sign((ECPrivateKey) ephemeralKeys.getPrivate(), os.toByteArray());
         return isdKeySetEstablishmentSendKeyParams(ePk, a6crt, sig);
     }
@@ -347,10 +362,9 @@ public class ECKeyAgreementEG {
             throws Exception {
         byte[] tdata = new ByteArrayOutputStream() {
             {
-                Utils.DGI.append(this, 0x3A02, a6crt);
-                // Make public key DGI
-                Utils.DGI.append(this, 0x7F49, ePk);
-                Utils.DGI.append(this, 0x5F37, sig);
+                Utils.BER.appendTLV(this, SGP02_KEY_ESTABLISHMENT_TAG, a6crt);
+                Utils.BER.appendTLV(this, SGP02_PUBLIC_KEY_TAG, ePk);
+                Utils.BER.appendTLV(this, GPC_A_SIGNATURE_TAG, sig);
             }
         }.toByteArray();
         return new SDCommand.APDU(0x80, 0xE2, 0x89, 0x01, tdata);
@@ -371,15 +385,15 @@ public class ECKeyAgreementEG {
         Utils.BER.appendTLV(os, (short) 0x42, caid);
 
         byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(cert); // cert.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
-        Utils.DGI.append(os, 0x5F20, subjectIdentifier);
+        Utils.BER.appendTLV(os, GPC_A_SUBJECT_IDENTIFIER_TAG, subjectIdentifier);
         Utils.BER.appendTLV(os, (byte) 0x95, keyUsageQual);
         Date startDate = cert.getNotBefore();
         Date expDate = cert.getNotAfter();
         SimpleDateFormat df = new SimpleDateFormat("yyyMMdd");
         if (startDate != null)
-            Utils.DGI.append(os, 0x5F25,
+            Utils.BER.appendTLV(os, GPC_A_CERT_EFFECTIVE_DATE_TAG,
                     Utils.HEX.h2b(df.format(startDate)));
-        Utils.DGI.append(os, 0x5F24,
+        Utils.BER.appendTLV(os,  GPC_A_CERT_EXPIRY_DATE_TAG,
                 Utils.HEX.h2b(df.format(expDate)));
         // Make the discretionary data:
         // Table 77 of SGP 02 v4.1 & XX shows it should have:
@@ -398,7 +412,7 @@ public class ECKeyAgreementEG {
         ECPublicKey ecPublicKey = (ECPublicKey) cert.getPublicKey();
         byte[] xpubData = Utils.ECC.encode(ecPublicKey, keyParamRef);
 
-        Utils.DGI.append(os, 0x7F49, xpubData);
+        Utils.BER.appendTLV(os, SGP02_PUBLIC_KEY_TAG, xpubData);
         return os.toByteArray();
     }
 

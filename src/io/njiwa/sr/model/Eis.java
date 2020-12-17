@@ -271,6 +271,7 @@ public class Eis {
                     .setMaxResults(1)
                     .getSingleResult();
         } catch (Exception ex) {
+            String xs = ex.getMessage();
         }
         return null;
     }

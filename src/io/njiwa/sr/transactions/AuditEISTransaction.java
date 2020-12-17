@@ -107,15 +107,22 @@ public class AuditEISTransaction extends SmSrBaseTransaction {
 
                     ByteArrayInputStream xin = new ByteArrayInputStream(xdata);
                     xin.mark(2);
-                    int b1 = xin.read() & 0xFF;
-                    int b2 = xin.read() & 0xFF;
-                    xin.reset();
-                    if (b1 == 0xFF && b2 == 0x21) try {
-                        Utils.Pair<Integer, byte[]> xres = Utils.DGI.decode(xin);
-                        xin = new ByteArrayInputStream(xres.l);
-                    } catch (Exception ex) {
-
+                    int b1, b2;
+                    try {
+                         b1 = xin.read() & 0xFF;
+                         b2 = xin.read() & 0xFF;
+                        xin.reset();
+                    } catch (Exception ex){
+                        b1 = b2 = 0;
                     }
+
+                    if (b1 == 0xFF && b2 == 0x21)
+                        try {
+                        Utils.Pair<InputStream, Integer> xres = Utils.BER.decodeTLV(xin, true);
+                        xin =  new ByteArrayInputStream( Utils.getBytes(xres.k));
+                        } catch (Exception ex) {
+
+                        }
                     else if (b1 != 0xE3) // Do not remove it, let it be handled below, since it may appear more than
                         // once. Right?
                         Utils.lg.info(String.format("Warning: Invalid tag 0x%02x%02x in response to AuditEIS command(s)",
@@ -149,9 +156,9 @@ public class AuditEISTransaction extends SmSrBaseTransaction {
                                     b2 = xin2.read() & 0xFF;
                                     xin2.reset(); // Go back
                                     if (b1 == 0x9F && b2 == 0x70) {
-                                        Utils.Pair<Integer, byte[]> xr = Utils.DGI.decode(xin2);
-                                        data = xr.l;
-                                        tag = xr.k;
+                                        Utils.Pair<InputStream, Integer> xr = Utils.BER.decodeTLV(xin2, true);
+                                        data =   Utils.getBytes(xr.k);
+                                        tag = xr.l;
                                     } else {
                                         xres = Utils.BER.decodeTLV(xin2);
                                         data = new byte[xres.k.available()];

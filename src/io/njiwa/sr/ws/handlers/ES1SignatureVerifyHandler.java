@@ -159,7 +159,7 @@ public class ES1SignatureVerifyHandler implements SOAPHandler<SOAPMessageContext
                 // }
             } else {
                 // Keep original XML for signature and signed info
-                context.put(SIGNATURE_KEY, Utils.XML.getNodeString(signatureNode));
+                context.put(SIGNATURE_KEY, Utils.XML.getNodeString(sig));
                 context.put(SIGNED_INFO_KEY, Utils.XML.getNodeString(signedInfo));
                 context.setScope(SIGNED_INFO_KEY, MessageContext.Scope.APPLICATION);
                 context.setScope(SIGNATURE_KEY, MessageContext.Scope.APPLICATION);

@@ -42,9 +42,8 @@ public class UpdateConnectivityParamsTransaction extends SmSrBaseTransaction {
         final byte[] xparams = Utils.HEX.h2b(params);
         ByteArrayOutputStream data = new ByteArrayOutputStream() {
             {
-                write(new byte[]{(byte) 0x3A, 0x07}); // Sec 4.1.3.4
-                Utils.DGI.appendLen(this, xparams.length);
-                write(xparams);
+              Utils.BER.appendTLV(this, new byte[]{(byte) 0x3A, 0x07}, // Sec 4.1.3.4
+                xparams);
             }
         };
         addAPDU(new SDCommand.APDU(0x80, 0xE2, 0x88, 0x00, data.toByteArray()));

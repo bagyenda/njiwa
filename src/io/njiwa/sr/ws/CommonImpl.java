@@ -462,6 +462,7 @@ public class CommonImpl {
             eis = xeis == null || xeis.getRegistrationComplete() != true ? null : Eis.fromModel(xeis);
             eis.hideGetEISFields(sender.getOid(), senderType);
         } catch (Exception ex) {
+            String xs = ex.getMessage();
         }
 
         if (eis == null) {

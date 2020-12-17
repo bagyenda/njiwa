@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * Created by bagyenda on 06/05/2016.
  */
-@XmlRootElement(namespace = "http://www.w3.org/2000/09/xmldsig#")
+@XmlRootElement(namespace = "http://www.w3.org/2000/09/xmldsig#", name="EumSignature")
 public class Signature {
     @XmlElement(name = "SignedInfo", namespace = "http://www.w3.org/2000/09/xmldsig#")
     public SignedInfo signedInfo;
