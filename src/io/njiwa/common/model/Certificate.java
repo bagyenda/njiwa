@@ -141,8 +141,8 @@ public class Certificate {
             ByteArrayInputStream inputStream = new ByteArrayInputStream(Utils.HEX.h2b(data));
             byte[] x = Utils.BER.decodeTLV(inputStream, GPC_A_CERTIFICATE_TAG);
 
-            ByteArrayInputStream xin = new ByteArrayInputStream(x);
-            PushbackInputStream in = new PushbackInputStream(xin);
+            ByteArrayInputStream in = new ByteArrayInputStream(x);
+
             while (in.available() > 0) {
                 in.mark(1);
                 int ch = 0xFF & in.read();
@@ -172,7 +172,7 @@ public class Certificate {
                         break;
                     case 0x95:
 
-                        d.keyUsage = (xdata[0] << 8) | xdata[1];
+                        d.keyUsage = ((xdata[0] &0xFF) << 8) | xdata[1] &0xFF;
                         break;
                     case 0x5F25:
                         try {
@@ -198,7 +198,7 @@ public class Certificate {
                         break;
                     case 0x7F49:
                         d.publicKeyFull = xdata;
-                        xin = new ByteArrayInputStream(xdata);
+                        InputStream xin = new ByteArrayInputStream(xdata);
                         try {
                             // Parse public key
                             d.publicKeyQ = Utils.BER.decodeTLV(xin, (short)0xB0);

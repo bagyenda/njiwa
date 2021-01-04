@@ -15,8 +15,7 @@ package io.njiwa.dp.transactions;
 import io.njiwa.common.ECKeyAgreementEG;
 import io.njiwa.common.SDCommand;
 import io.njiwa.common.Utils;
-import io.njiwa.common.model.RpaEntity;
-import io.njiwa.common.model.TransactionType;
+import io.njiwa.common.model.*;
 import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
@@ -47,7 +46,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 /**
  * @brief Represents a downloadProfile transactions (see Sec 5.3.2 of SGP 02 v3.1
  */
-public class DownloadProfileTransaction extends SmDpBaseTransactionType implements Scp03.GetKey,
+public class DownloadProfileTransaction extends SmDpBaseTransactionType implements
         ProfileTemplate.ConnectivityParams {
     public static final byte SCP03_KEY_VERSION = 0x03;
     public static final byte SCP03_KEY_ID = 0x01;
@@ -65,7 +64,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
     public byte[] sin;
     public byte[] ecasd_pubkey;
     public int ecasd_pubkey_paramRef;
-    public byte[] secureChannelBaseKey;
+   // public byte[] secureChannelBaseKey;
     public byte[] receiptKey;
 
     // The ephemeral  keys
@@ -106,16 +105,29 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
         eid = euicc.getEid();
     }
 
-    private void setChannelAndReceiptKeys(byte[] dr) throws Exception {
+    private void setChannelAndReceiptKeys(byte[] dr, ISDP isdp) throws Exception {
         byte[] keyData = ECKeyAgreementEG.computeKeyData(0x5C, dr, hostID, sdin, sin, ecasd_pubkey,
                 ecasd_pubkey_paramRef, eSK_DP_ECKA, 256);
-        // According to Table 3-29 of GPC Ammendment A, the receipt key gets first 16 bytes, and securee channel
+        // According to Table 3-29 of GPC Ammendment A, the receipt key gets first 16 bytes, and secure channel
         // base key next 16 bytes, so:
 
-        secureChannelBaseKey = new byte[16];
+        byte[] secureChannelBaseKey = new byte[16];
         receiptKey = new byte[16];
         System.arraycopy(keyData, 0, receiptKey, 0, receiptKey.length);
         System.arraycopy(keyData, receiptKey.length, secureChannelBaseKey, 0, secureChannelBaseKey.length);
+
+        // Copy it into the ISDP.
+        List<KeySet> l = isdp.getKeysets();
+        if (l == null) {
+            l = new ArrayList<>();
+            isdp.setKeysets(l);
+        }
+
+        List<KeyComponent> cl = new ArrayList<>();
+        cl.add(new KeyComponent(secureChannelBaseKey, KeyComponent.Type.AES));
+        List<Key> kl = new ArrayList<>();
+        kl.add(new Key(SCP03_KEY_ID,null,cl));
+        l.add(new KeySet(SCP03_KEY_VERSION, KeySet.Type.SCP03, new ArrayList<>(),kl,0L));
     }
 
     @Override
@@ -232,7 +244,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                         ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
                                 requestingEntityId, response, relatesTO, startDate, iccid);
                     } else {
-                        setChannelAndReceiptKeys(DR);
+                        setChannelAndReceiptKeys(DR,trans.getIsdp());
                         byte[] xreceipt = ECKeyAgreementEG.computeReceipt(DR, sdin, hostID, SCP03_KEY_ID,
                                 SCP03_KEY_VERSION,
                                 ECKeyAgreementEG.INCLUDE_DERIVATION_RANDOM | ECKeyAgreementEG.CERTIFICATE_VERIFICATION_PRECEDES, receiptKey); // Check
@@ -258,6 +270,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                     ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
                             requestingEntityId, response, relatesTO, startDate, iccid);
                 } else try {
+                    ISDP isdp = trans.getIsdp();
                     // Handle response, one by one
                     ByteArrayInputStream xin = new ByteArrayInputStream(response);
                     BufferedInputStream in = new BufferedInputStream(xin);
@@ -286,7 +299,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                             }
                         }.toByteArray();
                         session = scp03Sessions.pollFirst(); // Get session
-                        byte[] resp = session.processResponse(xresp, this);
+                        byte[] resp = session.processResponse(xresp, isdp);
                         if (resp != null && resp.length > 0) {
                             String xs = "", sep = "";
                             // Process Profile TLV command responses
@@ -316,7 +329,6 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                         ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
                                 requestingEntityId, response, relatesTO, startDate, iccid);
                     } else {
-                        ISDP isdp = trans.getIsdp();
                         isdp.setState(ISDP.State.Disabled); // Installed but not enabled.
                         if (!enableProfile)
                             status =
@@ -628,11 +640,6 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
         }
 
         return false;
-    }
-
-    @Override
-    public byte[] getAESkey(int keyVersion, int keyID) {
-        return secureChannelBaseKey; // Return base key
     }
 
     @Override

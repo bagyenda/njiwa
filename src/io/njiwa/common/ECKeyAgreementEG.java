@@ -247,7 +247,7 @@ public class ECKeyAgreementEG {
                                 write(new byte[]{(byte) 0x82, 0x01, (byte) keyID}); // Key Identifier (for first key)
                                 write(new byte[]{(byte) 0x83, 0x01, (byte) keyVersion}); // Key version
                                 if (initialCounter == null)
-                                    write(new byte[]{(byte) 0x91, 0x00,}); // Initial counter
+                                    write(new byte[]{(byte) 0x91, 0x00,}); // Initial counter = 0
                                 else
                                     Utils.BER.appendTLV(this, (short) 0x91, initialCounter); // Better beof length 0, 2,03,05 or 08
                                 if (sdin != null && hostID != null) {

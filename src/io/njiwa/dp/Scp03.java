@@ -70,7 +70,7 @@ public class Scp03 {
     }
 
     public interface GetKey {
-        byte[] getAESkey(int keyVersion, int keyID);
+        byte[] baseSCP03key(int keyVersion, int keyID);
     }
 
     public static class Error extends Exception {
@@ -394,7 +394,7 @@ public class Scp03 {
                         }
 
                         // Compute session keys
-                        byte[] staticKey = g.getAESkey(keyVersion, keyID);
+                        byte[] staticKey = g.baseSCP03key(keyVersion, keyID);
                         // Make the context parameter
                         byte[] context = Arrays.copyOf(hostChallenge, hostChallenge.length + cardChallenge.length);
                         System.arraycopy(cardChallenge, 0, context, hostChallenge.length, cardChallenge.length);

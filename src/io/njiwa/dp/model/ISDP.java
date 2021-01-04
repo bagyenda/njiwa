@@ -12,8 +12,14 @@
 
 package io.njiwa.dp.model;
 
+import io.njiwa.common.model.Key;
+import io.njiwa.common.model.KeyComponent;
+import io.njiwa.common.model.KeySet;
+import io.njiwa.dp.Scp03;
+
 import javax.persistence.*;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Created by bagyenda on 31/03/2017.
@@ -26,7 +32,7 @@ import java.util.Date;
 }
 )
 @SequenceGenerator(name = "dp_isdp", sequenceName = "dp_isdps_seq")
-public class ISDP {
+public class ISDP implements Scp03.GetKey {
     @Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "dp_isdp")
@@ -60,6 +66,12 @@ public class ISDP {
     @Column(nullable = true)
     private
     String aid; // AID assigned by SM-SR
+
+    @Column(nullable = true)
+    private String TARs; // As comma-separated list
+
+    @OneToMany(mappedBy = "isdp", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<KeySet> keysets; //!< The keys in this thingie
 
     public ISDP() {
     }
@@ -148,10 +160,36 @@ public class ISDP {
         this.aid = aid;
     }
 
+    public List<KeySet> getKeysets() {
+        return keysets;
+    }
+
+    public void setKeysets(List<KeySet> keysets) {
+        this.keysets = keysets;
+    }
+
     public enum State {
         InstallInProgress, Created, Enabled, Disabled, Deleted
         // This last one can't happen of course, it is only
         // used for transacting internally
     }
 
+    @Override
+    public byte[] baseSCP03key(int keyVersion, int keyID) {
+        List<KeySet> l = getKeysets();
+        try {
+            for (KeySet k: l)
+                if (k.getVersion() == keyVersion && k.getType() == KeySet.Type.SCP03) {
+                    List<Key> kl = k.getKeys();
+                    for (Key key: kl)
+                        if (key.getIndex() == keyID) {
+                            KeyComponent kc = key.findSuitableKeycomponent(new KeyComponent.Type[] {KeyComponent.Type.AES});
+                            return kc.byteValue();
+                        }
+                }
+        } catch (Exception ex) {
+            String xs = ex.getMessage();
+        }
+        return null;
+    }
 }

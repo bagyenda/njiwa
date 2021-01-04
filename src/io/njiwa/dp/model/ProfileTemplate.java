@@ -446,12 +446,14 @@ public class ProfileTemplate {
                 if (target == null)
                     target = ParamTarget.FILEDATA;
                 List<Utils.Pair<byte[], byte[]>> l = replacements.get(target);
-                l.add(new Utils.Pair<byte[], byte[]>(e.getKey().getBytes(StandardCharsets.UTF_8), e.getValue()));
+                l.add(new Utils.Pair<>(e.getKey().getBytes(StandardCharsets.UTF_8), e.getValue()));
             }
         // Search the PE and modify
         if (ptypes != null)
             for (ProfileElement p : profileElements)
-                ParamTarget.patchPE(p, replacements);
+                try {
+                    ParamTarget.patchPE(p, replacements);
+                } catch (Exception ex){} // Really?
 
         return toBytes(profileElements);
     }
@@ -550,7 +552,7 @@ public class ProfileTemplate {
                             patchString(aka.getAlgoConfiguration().getAlgoParameter().getXoringConstants(), naaList);
 
                         PEAKAParameter.SqnInit s = aka.getSqnInit();
-                        if (s.getBerOctetString() != null)
+                        if (s != null && s.getBerOctetString() != null)
                             for (BerOctetString x : s.getBerOctetString())
                                 patchString(x, naaList);
                     }

@@ -73,7 +73,7 @@ public class KeySet {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     private
-    ISDP isdp; // Map to SM-DP Security Domain, if this is owned by the SM-DP
+    ISDP isdp; // Map to SM-DP ISD-P, if this is owned by the SM-DP
 
     public KeySet() {
     }
@@ -195,6 +195,14 @@ public class KeySet {
             return getType();
         else
             return Type.fromVersion(getVersion());
+    }
+
+    public ISDP getIsdp() {
+        return isdp;
+    }
+
+    public void setIsdp(ISDP isdp) {
+        this.isdp = isdp;
     }
 
     public enum Type {

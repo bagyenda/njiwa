@@ -194,9 +194,10 @@ public final class ES2Client {
         }
     }
 
-    public static Eis getEIS(PersistenceUtility po, final RpaEntity smsr, final String eid) {
+
+    public static Eis getEIS(EntityManager em, final RpaEntity smsr, final String eid) {
         try {
-            return po.doTransaction((po1, em) -> getEIS(em, smsr, UUID.randomUUID().toString(), eid).eis);
+            return getEIS(em, smsr, UUID.randomUUID().toString(), eid).eis;
         } catch (Exception ex) {
         }
         return null;
