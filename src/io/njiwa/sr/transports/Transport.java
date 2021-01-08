@@ -322,16 +322,10 @@ public abstract class Transport {
         int count = sres.k;
         long nextSecs = sres.m;
 
-        if (messageStatus == MessageStatus.Sent)
-            Utils.lg.info(String.format("%s: Dispatched %d %s to [%s] via %s, res=%s",
-                    type,
-                    sender.unitsCount(count),
-                    sender.getUnit(ctx),
-                    msisdn,
-                    sender.getName(),
-                    messageStatus
-            ));
-        else
+        if (messageStatus == MessageStatus.Sent) {
+            otaParams.postProcessChainingInfo(); // Handle chaining...
+            Utils.lg.info(String.format("%s: Dispatched %d %s to [%s] via %s, res=%s", type, sender.unitsCount(count), sender.getUnit(ctx), msisdn, sender.getName(), messageStatus));
+        } else
            Utils.lg.info(String.format("%s: Not sent, status=%s", type, messageStatus));
 
         return new Utils.Triple<>(count, nextSecs, messageStatus);

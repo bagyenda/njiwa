@@ -182,12 +182,15 @@ public class Eis {
     private
     Boolean registrationComplete;
 
-    @Column(insertable = false)
     /**
      * @brief The current, pending profile change. Only one profile change can be pending at a time.
      */
+    @Column(insertable = false)
     private
     Long pendingProfileChangeTransaction;
+
+    @Column(insertable = false,  columnDefinition = "boolean not null default false")
+    private Boolean scriptChainingActive; // Whether ETSI TS 102 226 script chaining is active or not.
 
     @Column(insertable = false)
     private Long pendingEuiccHandoverTransaction;
@@ -965,6 +968,14 @@ public class Eis {
 
     public void setPendingEuiccHandoverTransaction(Long pendingEuiccHandoverTransaction) {
         this.pendingEuiccHandoverTransaction = pendingEuiccHandoverTransaction;
+    }
+
+    public Boolean getScriptChainingActive() {
+        return scriptChainingActive;
+    }
+
+    public void setScriptChainingActive(Boolean scriptChainingActive) {
+        this.scriptChainingActive = scriptChainingActive;
     }
 
     // Represents a broken down EID from a string

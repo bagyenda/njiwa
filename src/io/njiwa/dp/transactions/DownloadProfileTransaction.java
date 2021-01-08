@@ -377,10 +377,9 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
         }
     }
 
-    private boolean doSendData(EntityManager em, byte[] data, SmDpTransaction trans, boolean hasMore) {
+    private boolean doSendData(EntityManager em, String aid, byte[] data, SmDpTransaction trans, boolean hasMore) {
         try {
             String msgID = trans.newRequestMessageID(); // Create new one.
-            String aid = trans.getIsdp().getAid(); // Get AID
 
             Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
             final ES3 proxy = es3.l;
@@ -475,7 +474,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 };
                 byte[] data = os.toByteArray();
 
-                return doSendData(em, data, trans,true);
+                return doSendData(em, null, data, trans,true);
 
 
             case ESTABLISHKEYSET_SEND_DP_ECKA:
@@ -488,7 +487,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 final SDCommand apdu = ECKeyAgreementEG.isdKeySetEstablishmentSendKeyParams(randomChallenge, kp, a6,
                         ecasd_pubkey_paramRef);
                 try {
-                    return doSendData(em, apdu.toByteArray(), trans,true);
+                    return doSendData(em, null, apdu.toByteArray(), trans,true);
                 } catch (Exception ex) {
                     return false;
                 }
@@ -528,7 +527,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                                 write(c.toByteArray());
                         }
                     }.toByteArray();
-                    boolean res = doSendData(em, xdata, trans,false);
+                    boolean res = doSendData(em,trans.getIsdp().getAid(), xdata, trans,false);
                     if (end >= 0 && res) offset = end;
                     return res;
                 } catch (Exception ex) {

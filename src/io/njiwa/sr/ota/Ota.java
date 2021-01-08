@@ -587,9 +587,8 @@ public class Ota {
      * @brief Construct a package to be wrapped using 03.48
      */
     public static Utils.Pair<byte[], Integer> mkOTAPkg(Params otaParams, List<byte[]> l, int startIndex,
-                                                       HasEnoughOtaBuffer enoughOtaBuffer) throws Exception {
-
-
+                                                       HasEnoughOtaBuffer enoughOtaBuffer,
+                                                       ScriptChaining chainingType) throws Exception {
         // Check SPI1, force some flags
         if (((otaParams.spi1 >> 3) & 0x03) == 0) {
             if (!otaParams.forcedSpi1) otaParams.spi1 = (0x02 << 3) | (otaParams.spi1 & 0x07);
@@ -597,8 +596,9 @@ public class Ota {
 
         if ((otaParams.spi2 & 0x03) == 0) otaParams.forceDLR = true; // Force DLR tracking
 
+        if (chainingType == null)
+            chainingType = ScriptChaining.fromOTAParams(startIndex, l.size());
 
-        ScriptChaining chainingType = ScriptChaining.fromOTAParams(startIndex, l.size());
         final byte[] sdata = otaParams.allowChaining ? chainingType.toBytes() : new byte[0]; // Put script chaining
         // data in first
         int cursize = sdata.length + (ServerSettings.Constants.useIndefiniteCodingInExpandedFormat ? 2 : 1 + 4); //
@@ -641,10 +641,10 @@ public class Ota {
         } catch (Exception ex) {
         }
         otaParams.allowChaining = false; // Prevent chaining. Right?
+        otaParams.chainingStatus = chainingType; // Upper layer needs it.
 
         return new Utils.Pair<>(xos.toByteArray(), i);
     }
-
     /**
      * @param data          the data received after Command TLV Tag and length have been removed
      * @param transportType
@@ -773,6 +773,11 @@ public class Ota {
             else if (firstData) return FIRST_SCRIPT_DELETE_ON_RESET;
             else if (lastData) return LAST_SCRIPT;
             else return SUBSEQUENT_SCRIPT_MORE_TO_FOLLOW;
+        }
+
+        public static boolean chainEnds(ScriptChaining c)
+        {
+            return c == null || c == NOCHAINING || c == LAST_SCRIPT;
         }
 
         public byte[] toBytes() {
@@ -1020,6 +1025,7 @@ public class Ota {
         public short responseStatusCode;
         public boolean porOnError = false;
         private byte[] TAR; //!< The TAR. For informational purposes only! If SD is set or profile is set, we use that
+        ScriptChaining chainingStatus;
 
         public Params(int spi1, int spi2, int kic, int kid, byte[] tar, byte[] counter, ProfileInfo p,
                       SecurityDomain sd) {
@@ -1068,6 +1074,8 @@ public class Ota {
                     } catch (Exception ex) {
                         setTAR(new byte[3]);
                     }
+                else if (sd != null)
+                    setTAR(sd.firstTAR()); // Copy it over. Right?
                 this.forcePush = Utils.toBool(params.get("force-push")); // Get Force push param
                 if (this.forcePush)  // Check for force push: If there, remove it so next round doesn't find it.
                     params.remove("force-push");
@@ -1094,18 +1102,6 @@ public class Ota {
         public Params() {
         } // Empty constructor
 
-        // Grab TAR from profile or SD
-        private void updateTarFromSettings() {
-            if (this.TAR == null) try {
-                String tar = null;
-                if (profile != null) tar = profile.TAR();
-                else tar = sd.firstTAR();
-                this.TAR = Utils.HEX.h2b(tar);
-            } catch (Exception ex) {
-            }
-
-        }
-
         public String mkRequestID() {
             // First try with the received counter, else use the generated counter.
             Long x = receivedRfmCounter != null ? receivedRfmCounter : rfmCounter;
@@ -1126,16 +1122,24 @@ public class Ota {
         }
 
         public String getTARasString() {
-            return Utils.HEX.b2H(getTAR());
+            byte[] tar = getTAR();
+            return  tar != null ? Utils.HEX.b2H(tar) : "";
         }
 
 
-        public String getHTTPargetApplication() throws Exception {
+        public String getHTTPargetApplication()  {
             String aid;
             if (this.profile != null) aid = this.profile.getIsd_p_aid();
             else if (this.sd != null && this.sd.getRole() != SecurityDomain.Role.ISDR) aid = this.sd.getAid();
             else aid = null;
             return aid == null ? null : Utils.ramHTTPPartIDfromAID(aid);
+        }
+
+        public void postProcessChainingInfo() {
+            try {
+                boolean chainEnds = ScriptChaining.chainEnds(chainingStatus);
+                eis.setScriptChainingActive(chainEnds? false : true);
+            } catch (Exception ex) {}
         }
 
     }
@@ -1183,6 +1187,7 @@ public class Ota {
                 RemoteAPDUStructure r;
                 // Now parse stuff
                 byte[] data;
+                int numApdus = 0;
                 if (isResp) {
                     input.read(); // Skip the tag.
                     if (indefiniteCoding) data = getIndefiniteCodingData(input);
@@ -1192,7 +1197,7 @@ public class Ota {
                         input.read(data);
                         int tag2 = data[0] & 0xFF;
                         if (tag2 == Number_of_Executed_C_APDUS_Tag) {
-                            int numApdus = data[2] & 0xFF;
+                            numApdus = data[2] & 0xFF;
                             // Skip 3 elements as per table 5.11
                             data = Arrays.copyOfRange(data, 3, data.length);
                             Utils.lg.info(String.format("Received response, %d c-apdus executed, data: %s", numApdus,
@@ -1201,6 +1206,7 @@ public class Ota {
                     }
                     // r = new ETSI102226APDUResponses();
                     r = ETSI102226APDUResponses.parse(data); // Parse directly.
+                    ((ETSI102226APDUResponses)r).numExecutedApdus = numApdus;
                 } else {
                     r = new GenericEuiccResponse();
                     r.data = data_in;
@@ -1226,11 +1232,25 @@ public class Ota {
             public boolean retry;
             public String formattedResponse;
             public byte[] respData;
+            public  int numExecutedApdus;
 
             public ETSI102226APDUResponses() {}
 
             public static ETSI102226APDUResponses parse(byte[] in) throws Exception {
                 return parse(new ByteArrayInputStream(in));
+            }
+
+            public static ETSI102226APDUResponses createGenericErrorResponse(String err)
+            {
+
+                ETSI102226APDUResponses resp = new ETSI102226APDUResponses();
+                resp.formattedResponse = err;
+                resp.responses = new ArrayList<>();
+                resp.responses.add(new Response(-1));
+                resp.isSuccess = false;
+                resp.respData = new byte[0];
+
+                return resp;
             }
 
             /**
@@ -1264,6 +1284,8 @@ public class Ota {
                     if (tag == R_APDU_TAG) r.add(data);
                     else if (tag == Bad_Format_Tag) r.add(data[0]); // Bad format...
                     else if (tag == Immediate_Action_Response_Tag) r.addImmediateResponse(data);
+                    else if (tag == Number_of_Executed_C_APDUS_Tag)
+                        r.numExecutedApdus = data[0];
                     else if (tag != Number_of_Executed_C_APDUS_Tag)
                         r.add(tag, data); // Generic response, e.g. for a SCP03t command
                 }
@@ -1367,7 +1389,7 @@ public class Ota {
                         // Response proper
                         boolean isSuccess = SDCommand.APDU.isSuccessCode(rp.sw1);
 
-                        String xs = String.format("%s[Cmd<%s> <%s>", sep, formatError(0, ct, rp.sw1, rp.sw2),
+                        String xs = String.format("%s[Cmd<%s> <%s>", sep, formatError(0, r.numExecutedApdus, rp.sw1, rp.sw2),
                                 rp.data.length > 0 ? Utils.HEX.b2H(rp.data) : "(no resp data)");
                         frmt.append(xs);
                         hasError |= !isSuccess; // Any error is treated as a total failure. Right?

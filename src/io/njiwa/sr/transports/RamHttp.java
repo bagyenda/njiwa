@@ -135,25 +135,12 @@ public class RamHttp extends Transport {
 
     }
 
-    private static String formatRamHTTPXAdminFrom(Eis sim) throws Exception {
+    private static String formatRamHTTPXAdminFrom(Eis sim)  {
         String eid = sim.getEid();
         SecurityDomain sd = sim.findISDR();
 
         String isdr_aid = sd.getAid();
         return String.format("//se-id/eid/%s;//aa-id/aid/%s", eid, Utils.ramHTTPPartIDfromAID(isdr_aid));
-    }
-
-    private static String getAIDfromHTTPXAdminFrom(String hdr) {
-        try {
-            // Find last "//aa-id/"
-            final String prefix = "//aa-id/aid/";
-            int i = hdr.indexOf(prefix);
-            String xs = hdr.substring(i + prefix.length());
-            String[] l = xs.split("/");
-            return l[0] + l[1]; // The AID.
-        } catch (Exception ex) {
-        }
-        return null;
     }
 
     /**
@@ -219,6 +206,7 @@ public class RamHttp extends Transport {
     }
 
     /**
+     *
      * @param bt
      * @param otaParams
      * @return
@@ -227,11 +215,11 @@ public class RamHttp extends Transport {
      */
     private Utils.Triple<byte[], Map<String, String>, String> makePkg(final SmSrTransaction bt, Ota.Params otaParams) throws Exception {
 
-        TransactionType ttype = bt.getTransObject();
+        SmSrBaseTransaction ttype = bt.getTransObject();
         if (!ttype.hasMore()) return null;
-
+        Ota.ScriptChaining chaining = ttype.commandChainingType(otaParams.eis,bt.getMoreToFollow());
         Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, ttype.cAPDUs, ttype.index,
-                (l) -> l < DEFAULT_HTTP_BUFFER_LEN);
+                (l) -> l < DEFAULT_HTTP_BUFFER_LEN,chaining);
         ttype.lastIndex = xres.l;
         byte[] body = xres.k;
         if (body == null) return null;
@@ -264,14 +252,14 @@ public class RamHttp extends Transport {
             SmSrTransaction.Status status = bt.getStatus();
             if (status != SmSrTransaction.Status.HttpWait && status != SmSrTransaction.Status.Ready && status != SmSrTransaction.Status.InProgress && status != SmSrTransaction.Status.Sent)
                 throw new Exception("This transaction has already completed. Will not re-send it");
-            Eis sim = em.find(Eis.class, bt.getEis_id(), LockModeType.PESSIMISTIC_WRITE);
-            sim.setLastRAMHttpRequest(Calendar.getInstance().getTime()); // Update date of last HTTP
+            Eis euicc = em.find(Eis.class, bt.getEis_id(), LockModeType.PESSIMISTIC_WRITE);
+            euicc.setLastRAMHttpRequest(Calendar.getInstance().getTime()); // Update date of last HTTP
 
             // int tkCount = tparams.size();
 
             String targetAID = bt.getTargetAID(); // Get the target AID
 
-            Ota.Params otaParams = new Ota.Params(sim, targetAID, null);
+            Ota.Params otaParams = new Ota.Params(euicc, targetAID, null);
             // Make a HTTP response object, containing the commands to be sent:
             Utils.Triple<byte[], Map<String, String>, String> xres = makePkg(bt, otaParams);
 
@@ -297,6 +285,7 @@ public class RamHttp extends Transport {
 
             resp = new Utils.Http.Response(Response.Status.OK, hdrs, ctype, body, closeConn);
 
+            otaParams.postProcessChainingInfo(); // Handle chaining stuff...
             //   em.flush(); // Force the changes out. Right?
         } catch (Exception ex) {
             resp = new Utils.Http.Response(Response.Status.NO_CONTENT, null, null, null, closeConn);
@@ -352,18 +341,22 @@ public class RamHttp extends Transport {
      * @param em
      * @param sim
      * @param tid
+     * @param scriptStatus
      * @param input
      * @param closeConn @return
      * @brief When a HTTP response is received as a response to an APDU sequence sent, process it.
      */
-    private Utils.Http.Response processResponse(EntityManager em, Eis sim, final long tid, byte[] input,
-                                                boolean closeConn) {
+    private Utils.Http.Response processResponse(EntityManager em, Eis sim, final long tid, String scriptStatus, byte[] input, boolean closeConn) {
         Utils.Http.Response resp;
         // Find the transaction and process the response.
         try {
-            // Parse the response first.
-            Ota.ResponseHandler.RemoteAPDUStructure rp = Ota.ResponseHandler.RemoteAPDUStructure.parse(input);
+            boolean executeOK = scriptStatus == null || scriptStatus.equalsIgnoreCase("ok");
+
+            // Parse the response first, but only if we had success...
+            Ota.ResponseHandler.RemoteAPDUStructure rp = executeOK ? Ota.ResponseHandler.RemoteAPDUStructure.parse(input) :
+                    Ota.ResponseHandler.ETSI102226APDUResponses.createGenericErrorResponse(scriptStatus);
             SmSrTransaction nextBt;
+
 
             if (rp instanceof Ota.ResponseHandler.ETSI102226APDUResponses) {
                 SmSrTransaction bt = em.find(SmSrTransaction.class, tid, LockModeType.PESSIMISTIC_WRITE);
@@ -775,7 +768,7 @@ public class RamHttp extends Transport {
                                 msgData));
                         StatsCollector.recordTransportEvent(TransportType.RAMHTTP, PacketType.MO); // Record
                         // incoming stat
-                        response = processResponse(em, euicc, tid, inputData, closeConn);
+                        response = processResponse(em, euicc, tid, xResponseStatus, inputData, closeConn);
                     } else /* if (req.uriVerb.equalsIgnoreCase(DISPATCHER_URI)) */ {
                         if (tid < 0) try {
                             SmSrTransaction bt = SmSrTransaction.findfirstTransaction(em, euicc.getId(),

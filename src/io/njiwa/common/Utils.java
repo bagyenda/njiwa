@@ -750,7 +750,7 @@ public class Utils {
         String rid, pix;
 
         rid = aid.substring(0, 10);
-        pix = aid.substring(11);
+        pix = aid.substring(10);
         return String.format("%s/%s", rid, pix);
     }
 

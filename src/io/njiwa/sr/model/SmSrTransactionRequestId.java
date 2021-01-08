@@ -19,7 +19,7 @@ import java.util.Date;
  * Created by bagyenda on 28/09/2016.
  */
 @Entity
-@Table(name="transaction_requestids_log",
+@Table(name="sr_transaction_requestids_log",
         indexes = {
                 @Index(columnList = "requestid,recipient",name="tr_req_idx1"),
                 @Index(columnList = "transaction_id", name="tr_req_idx2")

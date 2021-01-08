@@ -604,21 +604,24 @@ public class CommonImpl {
 
             io.njiwa.sr.model.Eis xEis = em.find(io.njiwa.sr.model.Eis.class, eisId);
             // Look for it by sd-aid
-            boolean foundSd = false;
-            List<ProfileInfo> pl = xEis.getProfiles();
-            List<SecurityDomain> sl = xEis.getSdList();
-            if (pl != null)
-                for (ProfileInfo p : pl)
+            boolean foundSd;
+            if (aid  == null)
+                foundSd = true;
+            else {
+                foundSd = false;
+                List<ProfileInfo> pl = xEis.getProfiles();
+                List<SecurityDomain> sl = xEis.getSdList();
+                if (pl != null) for (ProfileInfo p : pl)
                     if (p.getIsd_p_aid() != null && aid.equalsIgnoreCase(p.getIsd_p_aid())) {
                         foundSd = true;
                         break;
                     }
-            if (sl != null && !foundSd)
-                for (SecurityDomain s : sl)
+                if (sl != null && !foundSd) for (SecurityDomain s : sl)
                     if (s.getAid() != null && aid.equalsIgnoreCase(s.getAid())) {
                         foundSd = true;
                         break;
                     }
+            }
             if (!foundSd) {
                 status.status = BaseResponseType.ExecutionStatus.Status.Failed;
                 status.statusCodeData = new BaseResponseType.ExecutionStatus.StatusCode("8.3.1", "3.9",

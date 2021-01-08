@@ -1,25 +1,23 @@
 /*
  * Njiwa Open Source Embedded M2M UICC Remote Subscription Manager
- * 
- * 
+ *
+ *
  * Copyright (C) 2019 - , Digital Solutions Ltd. - http://www.dsmagic.com
  *
  * Njiwa Dev <dev@njiwa.io>
- * 
+ *
  * This program is free software, distributed under the terms of
  * the GNU General Public License.
- */ 
+ */
 
 package io.njiwa.sr.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.njiwa.common.Utils;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.model.TransactionsStatsListener;
-import io.njiwa.common.Utils;
-import io.njiwa.dp.model.SmDpTransaction;
-import io.njiwa.dp.transactions.SmDpBaseTransactionType;
 import io.njiwa.sr.transactions.SmSrBaseTransaction;
 import io.njiwa.sr.transports.Transport;
 import org.hibernate.annotations.DynamicInsert;
@@ -35,13 +33,10 @@ import java.util.List;
  */
 @Entity
 @EntityListeners(TransactionsStatsListener.class) // To record stats
-@Table(name = "sr_transactions_log",
-        uniqueConstraints = {@UniqueConstraint(name = "sr_tr_requestId", columnNames = {"msisdn", "requestID"})},
-        indexes = {
-                @Index(columnList = "msisdn,completed", name = "sr_tr_log_idx1"),
-                @Index(columnList = "eis_id", name = "sr_tr_log_idx2"),
-                @Index(columnList = "eid,messagetype", name = "sr_tr_log_idx4")
-        })
+@Table(name = "sr_transactions_log", uniqueConstraints = {@UniqueConstraint(name = "sr_tr_requestId", columnNames = {
+        "msisdn", "requestID"})}, indexes = {@Index(columnList = "msisdn,completed", name = "sr_tr_log_idx1"),
+        @Index(columnList = "eis_id", name = "sr_tr_log_idx2"), @Index(columnList = "eid,messagetype", name =
+        "sr_tr_log_idx4")})
 @SequenceGenerator(name = "sr_tr_sequence", sequenceName = "sr_tr_seq", allocationSize = 1)
 @DynamicInsert
 @DynamicUpdate
@@ -54,122 +49,84 @@ public class SmSrTransaction {
     @javax.persistence.Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "sr_tr_sequence")
-    private
-    Long Id;
+    private Long Id;
     @Column(nullable = true) // Can be null, e.g. for SMSR Change
-    private
-    Long eis_id; // Link to the eid
+    private Long eis_id; // Link to the eid
 
     @Column(nullable = false)
     private String eid; // The EID, if any
 
     @Column(nullable = false, columnDefinition = "timestamp not null default current_timestamp")
-    private
-    Date messageDate; // When added
+    private Date messageDate; // When added
     @Column(nullable = false, columnDefinition = "timestamp not null default current_timestamp")
-    private
-    Date expires;
+    private Date expires;
     @Column(nullable = false, columnDefinition = "timestamp not null default current_timestamp", insertable = false)
-    private
-    Date nextSend;
+    private Date nextSend;
     @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default '1970-01-01'")
-    private
-    Date lastSend;
+    private Date lastSend;
     @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default '1970-01-01'")
-    private
-    Date lastupdate;
+    private Date lastupdate;
     @Column(nullable = false, insertable = false, columnDefinition = "int not null default 0")
-    private
-    Integer numberOfAttempts; // Will be reset to zero after each Ack
+    private Integer numberOfAttempts; // Will be reset to zero after each Ack
     @Column(nullable = false, insertable = false, columnDefinition = "int not null default 0")
-    private
-    Integer numberOfTransactionsSent; // How many transactions have been sent. Including retries
+    private Integer numberOfTransactionsSent; // How many transactions have been sent. Including retries
     @Column(nullable = false, insertable = false, columnDefinition = "int not null default 0")
-    private
-    Integer retries;
+    private Integer retries;
     @Column(nullable = false, columnDefinition = "text not null default ''")
-    private
-    String messageType;
+    private String messageType;
     @Column(nullable = false, columnDefinition = "text not null default ''")
-    private
-    String messageID;
+    private String messageID;
     @Column(nullable = false, columnDefinition = "text not null default ''")
-    private
-    String responseEndPoint;
+    private String responseEndPoint;
     @Column(nullable = false, columnDefinition = "text not null default ''")
-    private
-    String transactionData; // JSON-encoded, of type TransactionObject
+    private String transactionData; // JSON-encoded, of type TransactionObject
     @Column(nullable = false, columnDefinition = "text not null default ''")
-    private
-    String transactionDataClassName; // The class name
+    private String transactionDataClassName; // The class name
     @Column(nullable = false, columnDefinition = "text not null default ''")
-    private
-    String msisdn; // MSISDN as used
+    private String msisdn; // MSISDN as used
     @Column(nullable = false, columnDefinition = "boolean not null default false")
     private Boolean moreToFollow;
     @Column(columnDefinition = "text", insertable = false, name = "requestid")
-    private
-    String lastrequestID;
+    private String lastrequestID;
     @Column(nullable = false, columnDefinition = "TEXT NOT NULL Default 'Ready'")
     @Enumerated(EnumType.STRING)
-    private
-    Status status;
+    private Status status;
     @Column(name = "transport_msg_status")
     @Enumerated(EnumType.STRING)
-    private
-    Transport.MessageStatus transportMessageStatus;
+    private Transport.MessageStatus transportMessageStatus;
     @Column(name = "statuscode", columnDefinition = "TEXT")
-    private
-    String simStatusCode; /*!< Received SIM response code */
+    private String simStatusCode; /*!< Received SIM response code */
     @Column(name = "simresponse", columnDefinition = "TEXT")
-    private
-    String simResponse; /*!< Received SIM response  */
+    private String simResponse; /*!< Received SIM response  */
     @Column(nullable = false, columnDefinition = "boolean not null default false", insertable = false)
-    private
-    Boolean completed; // Whether it has been completed
+    private Boolean completed; // Whether it has been completed
     @Column(nullable = true, columnDefinition = "TEXT")
-    private
-    String targetAID; // Target Security Domain, by AID. Can be NULL if we are talking to the ISDR
+    private String targetAID; // Target Security Domain, by AID. Can be NULL if we are talking to the ISDR
     @Column()
     @Enumerated(EnumType.STRING)
-    private
-    Transport.TransportType lastTransportUsed;
+    private Transport.TransportType lastTransportUsed;
     @Transient
     private Eis eis;
     @Column
-    private
-    Long relatesToTransaction; // The transaction which this relates to. Can be null
+    private Long relatesToTransaction; // The transaction which this relates to. Can be null
 
-    @OneToMany(cascade = CascadeType.ALL,orphanRemoval = true,mappedBy = "transaction")
-    private
-    List<SmSrTransactionRequestId> requestIdList;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, mappedBy = "transaction")
+    private List<SmSrTransactionRequestId> requestIdList;
 
     public SmSrTransaction() {
     }
 
-    public SmSrTransaction(EntityManager em, String messageType, String messageID, String responseEndPoint, String
-            eis_id, long
-                                   validityPeriod,
-                           boolean moreToFollow,
-                           SmSrBaseTransaction transObj)
-            throws
-            Exception {
-        this(messageType, messageID, responseEndPoint, -1, validityPeriod, moreToFollow,
-                transObj);
+    public SmSrTransaction(EntityManager em, String messageType, String messageID, String responseEndPoint,
+                           String eis_id, long validityPeriod, boolean moreToFollow, SmSrBaseTransaction transObj) throws Exception {
+        this(messageType, messageID, responseEndPoint, -1, validityPeriod, moreToFollow, transObj);
         Eis eis = Eis.findByEid(em, eis_id);
-        if (eis != null)
-            setEis_id(eis.getId());
+        if (eis != null) setEis_id(eis.getId());
         setEid(eis_id);
         setStatus(Status.Ready);
     }
 
-    public SmSrTransaction(String messageType, String messageID, String responseEndPoint, long
-            eis_id, long
-                                   validityPeriod,
-                           boolean moreToFollow,
-                           SmSrBaseTransaction transObj)
-            throws
-            Exception {
+    public SmSrTransaction(String messageType, String messageID, String responseEndPoint, long eis_id,
+                           long validityPeriod, boolean moreToFollow, SmSrBaseTransaction transObj) throws Exception {
         Calendar cal = Calendar.getInstance();
         Date mdate = cal.getTime(); // Our time
         cal.add(Calendar.SECOND, (int) validityPeriod);
@@ -204,15 +161,9 @@ public class SmSrTransaction {
 
     public static SmSrTransaction findTransaction(EntityManager em, String msisdn, String requestId) throws Exception {
         try {
-            Long xid = em.createQuery("SELECT id from SmSrTransaction WHERE msisdn = :m and lastrequestID = " +
-                            ":r ORDER by id DESC ",
-                    Long.class)
-                    .setParameter("m", msisdn)
-                    .setParameter("r", requestId)
-                    .setMaxResults(1)
-                    .getSingleResult();
-            if (xid == null)
-                xid = SmSrTransactionRequestId.findTransaction(em, msisdn, requestId);
+            Long xid = em.createQuery("SELECT id from SmSrTransaction WHERE msisdn = :m and lastrequestID = " + ":r " +
+                    "ORDER by id DESC ", Long.class).setParameter("m", msisdn).setParameter("r", requestId).setMaxResults(1).getSingleResult();
+            if (xid == null) xid = SmSrTransactionRequestId.findTransaction(em, msisdn, requestId);
             return em.find(SmSrTransaction.class, xid, LockModeType.PESSIMISTIC_WRITE);
         } catch (Exception ex) {
 
@@ -223,12 +174,8 @@ public class SmSrTransaction {
     public static SmSrTransaction findTransaction(EntityManager em, String eis_id, String messageType, Status status) {
         try {
             return em.createQuery(" from SmSrTransaction WHERE eid = :eid and messageType = :m and status = :s",
-                    SmSrTransaction.class)
-                    .setParameter("eid", eis_id)
-                    .setParameter("m", messageType)
-                    .setParameter("s", status)
-                    .setMaxResults(1)
-                    .getSingleResult();
+                    SmSrTransaction.class).setParameter("eid", eis_id).setParameter("m", messageType).setParameter("s"
+                    , status).setMaxResults(1).getSingleResult();
         } catch (Exception ex) {
 
         }
@@ -238,11 +185,8 @@ public class SmSrTransaction {
     public static SmSrTransaction findfirstTransaction(EntityManager em, long eid, Status status) {
         // Find transaction given predecessor and status
         try {
-            Long xId = em.createQuery("SELECT id FROM SmSrTransaction  WHERE eis_id = :i AND status = :s ORDER BY Id ASC", Long.class)
-                    .setParameter("i", eid)
-                    .setParameter("s", status)
-                    .setMaxResults(1)
-                    .getSingleResult();
+            Long xId = em.createQuery("SELECT id FROM SmSrTransaction  WHERE eis_id = :i AND status = :s ORDER BY Id " +
+                    "ASC", Long.class).setParameter("i", eid).setParameter("s", status).setMaxResults(1).getSingleResult();
             return em.find(SmSrTransaction.class, xId, LockModeType.PESSIMISTIC_WRITE);
         } catch (Exception ex) {
             String xs = ex.getMessage();
@@ -360,13 +304,12 @@ public class SmSrTransaction {
         this.eis_id = eid;
     }
 
-    public SmSrBaseTransaction getTransObject()  {
-        if (myObj == null)
-        try {
+    public SmSrBaseTransaction getTransObject() {
+        if (myObj == null) try {
             String xcls = getTransactionDataClassName();
             String xdata = getTransactionData();
             Class cls = Class.forName(xcls);
-            myObj = (SmSrBaseTransaction) (new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,false)).readValue(xdata, cls);
+            myObj = (SmSrBaseTransaction) (new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)).readValue(xdata, cls);
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }
@@ -374,27 +317,22 @@ public class SmSrTransaction {
     }
 
     public Eis eisEntry(EntityManager em) {
-        if (eis == null)
-            try {
-                eis = em.createQuery("from Eis where id = :i", Eis.class)
-                        .setParameter("i", getEis_id())
-                        .setMaxResults(1)
-                        .getSingleResult();
-            } catch (Exception ex) {
-            }
+        if (eis == null) try {
+            eis = em.createQuery("from Eis where id = :i", Eis.class).setParameter("i", getEis_id()).setMaxResults(1).getSingleResult();
+        } catch (Exception ex) {
+        }
         return eis;
     }
 
     @PrePersist
     @PreUpdate
     public void updateTransients() {
-        if (myObj != null)
-            try {
-                setTransactionDataClassName(myObj.getClass().getCanonicalName()); // Set name
-                setTransactionData(new ObjectMapper().writeValueAsString(myObj));
-            } catch (Exception ex) {
-                String xs = ""; // Dummy
-            }
+        if (myObj != null) try {
+            setTransactionDataClassName(myObj.getClass().getCanonicalName()); // Set name
+            setTransactionData(new ObjectMapper().writeValueAsString(myObj));
+        } catch (Exception ex) {
+            String xs = ""; // Dummy
+        }
     }
 
     public Boolean getMoreToFollow() {
@@ -447,44 +385,31 @@ public class SmSrTransaction {
 
     public void updateStatus(EntityManager em, Status status) {
         setStatus(status);
-        if (status == Status.Completed || status == Status.Error || status == Status.Failed || status == Status
-                .Expired) try {
-            // Look for euicc handover, and process
-            Eis xeis = eisEntry(em);
-            SmSrTransaction t = null;
-            if (xeis.verifyPendingEuiCCHandoverTransaction(em))
-                try {
-                // See if we have any pending
-                t = em.createQuery("from SmSrTransaction   WHERE  id <> :l AND status not in" +
-                        " (:b1,:b2,:b3," +
-                        ":b4)" +
-                        " and nextSend > current_timestamp and eis_id = :eid", SmSrTransaction
-                        .class)
-                        .setParameter("l", xeis.getPendingEuiccHandoverTransaction())
-                        .setParameter("b1", Status.Completed)
-                        .setParameter("b2", Status.Failed)
-                        .setParameter("b3", Status.Expired)
-                        .setParameter("b4", Status.Error)
-                        .setParameter("eid", eid)
-                        .setMaxResults(1)
-                        .getSingleResult();
+        if (status == Status.Completed || status == Status.Error || status == Status.Failed || status == Status.Expired)
+            try {
+                // Look for euicc handover, and process
+                Eis xeis = eisEntry(em);
+                SmSrTransaction t = null;
+                if (xeis.verifyPendingEuiCCHandoverTransaction(em)) try {
+                    // See if we have any pending
+                    t = em.createQuery("from SmSrTransaction   WHERE  id <> :l AND status not in" + " (:b1,:b2,:b3," + ":b4)" + " and nextSend > current_timestamp and eis_id = :eid", SmSrTransaction.class).setParameter("l", xeis.getPendingEuiccHandoverTransaction()).setParameter("b1", Status.Completed).setParameter("b2", Status.Failed).setParameter("b3", Status.Expired).setParameter("b4", Status.Error).setParameter("eid", eid).setMaxResults(1).getSingleResult();
 
 
+                } catch (Exception ex) {
+
+                }
+                if (t == null) try {
+                    t = em.find(SmSrTransaction.class, xeis.getPendingEuiccHandoverTransaction());
+                    // Force
+                    // it out
+                    t.markReadyToSend();
+                    Utils.lg.info(String.format("Sending out euicc handover transaction [%s]", t));
+                    // em.flush();
+                } catch (Exception ex) {
+
+                }
             } catch (Exception ex) {
-
             }
-            if (t == null) try {
-                t = em.find(SmSrTransaction.class, xeis.getPendingEuiccHandoverTransaction());
-                // Force
-                // it out
-                t.markReadyToSend();
-                Utils.lg.info(String.format("Sending out euicc handover transaction [%s]", t));
-                // em.flush();
-            } catch (Exception ex) {
-
-            }
-        } catch (Exception ex) {
-        }
     }
 
     public void markReadyToSend() {
@@ -536,21 +461,13 @@ public class SmSrTransaction {
     public SmSrTransaction findNextAvailableTransaction(EntityManager em) {
         try {
             TransactionType t = getTransObject();
-            if (t.hasMore())
-                return this;
+            if (t.hasMore()) return this;
             long lasttid = getId();
             long eid = getEis_id();
-            return em.createQuery("from SmSrTransaction   WHERE id > :l and status not in (:b1,:b2,:b3,:b4)" +
-                    " and nextSend > current_timestamp and eis_id = :eid", SmSrTransaction
-                    .class)
-                    .setParameter("l", lasttid)
-                    .setParameter("b1", Status.Completed)
-                    .setParameter("b2", Status.Failed)
-                    .setParameter("b3", Status.Expired)
-                    .setParameter("b4", Status.Error)
-                    .setParameter("eid", eid)
-                    .setMaxResults(1)
-                    .getSingleResult();
+            return em.createQuery("from SmSrTransaction   WHERE id > :l and status not in (:b1,:b2,:b3,:b4)" + " and " +
+                    "nextSend > current_timestamp and eis_id = :eid", SmSrTransaction.class).setParameter("l",
+                    lasttid).setParameter("b1", Status.Completed).setParameter("b2", Status.Failed).setParameter("b3"
+                    , Status.Expired).setParameter("b4", Status.Error).setParameter("eid", eid).setMaxResults(1).getSingleResult();
         } catch (Exception ex) {
             return null;
         }
@@ -565,8 +482,7 @@ public class SmSrTransaction {
         // em.flush();
     }
 
-    public void deleteTransactionRequestIds()
-    {
+    public void deleteTransactionRequestIds() {
         setLastrequestID(null);
         List<SmSrTransactionRequestId> l = getRequestIdList();
         try {
@@ -622,10 +538,8 @@ public class SmSrTransaction {
 
         return (hasMore && success) ? SmSrTransaction.Status.Ready : // If more data,
                 // send again
-                success ?
-                        SmSrTransaction.Status.Completed :
-                        retry ? SmSrTransaction.Status.Ready :
-                                SmSrTransaction.Status.Error;
+                success ? SmSrTransaction.Status.Completed : retry ? SmSrTransaction.Status.Ready :
+                        SmSrTransaction.Status.Error;
     }
 
     public Long getRelatesToTransaction() {
