@@ -13,11 +13,14 @@
 package io.njiwa.sr.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.model.TransactionsStatsListener;
 import io.njiwa.common.Utils;
 import io.njiwa.dp.model.SmDpTransaction;
+import io.njiwa.dp.transactions.SmDpBaseTransactionType;
+import io.njiwa.sr.transactions.SmSrBaseTransaction;
 import io.njiwa.sr.transports.Transport;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
@@ -46,7 +49,8 @@ import java.util.List;
 @Cacheable(false)
 public class SmSrTransaction {
     @Transient
-    TransactionType myObj = null;
+    SmSrBaseTransaction myObj = null;
+
     @javax.persistence.Id
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "sr_tr_sequence")
@@ -147,7 +151,7 @@ public class SmSrTransaction {
             eis_id, long
                                    validityPeriod,
                            boolean moreToFollow,
-                           TransactionType transObj)
+                           SmSrBaseTransaction transObj)
             throws
             Exception {
         this(messageType, messageID, responseEndPoint, -1, validityPeriod, moreToFollow,
@@ -163,7 +167,7 @@ public class SmSrTransaction {
             eis_id, long
                                    validityPeriod,
                            boolean moreToFollow,
-                           TransactionType transObj)
+                           SmSrBaseTransaction transObj)
             throws
             Exception {
         Calendar cal = Calendar.getInstance();
@@ -316,7 +320,7 @@ public class SmSrTransaction {
         return transactionData;
     }
 
-    public void setTransactionData(TransactionType obj) throws Exception {
+    public void setTransactionData(SmSrBaseTransaction obj) throws Exception {
         myObj = obj;
     }
 
@@ -356,13 +360,13 @@ public class SmSrTransaction {
         this.eis_id = eid;
     }
 
-    public TransactionType getTransObject()  {
+    public SmSrBaseTransaction getTransObject()  {
         if (myObj == null)
         try {
             String xcls = getTransactionDataClassName();
             String xdata = getTransactionData();
             Class cls = Class.forName(xcls);
-            myObj = (TransactionType) (new ObjectMapper()).readValue(xdata, cls);
+            myObj = (SmSrBaseTransaction) (new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,false)).readValue(xdata, cls);
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }

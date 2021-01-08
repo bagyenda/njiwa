@@ -85,7 +85,8 @@ public class ES3ResponseImpl {
                                      String data
 
     ) throws Exception {
-        po.doTransaction((po1,em) ->  {CommonImpl.createISDPResponseHandler(em,aid,messageId,data); return true;});
+        final boolean success = executionStatus.status == BaseResponseType.ExecutionStatus.Status.ExecutedSuccess;
+        po.doTransaction((po1,em) ->  {CommonImpl.createISDPResponseHandler(em,aid,messageId,success,data); return true;});
 
         WSUtils.getRespObject(context).sendError(Response.Status.ACCEPTED.getStatusCode(), "");
 

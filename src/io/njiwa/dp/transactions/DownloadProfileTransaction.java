@@ -140,20 +140,6 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
             case CREATEISDP:
                 boolean isSuccess = responseType != TransactionType.ResponseType.SUCCESS;
                 cmdType = "CreateISDP";
-                if (responseType == TransactionType.ResponseType.SUCCESS) {
-                    // Check return code
-                    try {
-                        // Parse response as RAPDU
-                        Utils.Pair<Integer, byte[]> xres = Utils.BER.decodeTLV(response);
-                        byte[] resp = xres.l;
-                        // Get response code
-                        int sw1 = resp[resp.length - 2];
-                        //  int sw2 = resp[resp.length-1];
-                        isSuccess = SDCommand.APDU.isSuccessCode(sw1);
-                    } catch (Exception ex) {
-                        isSuccess = false;
-                    }
-                }
 
                 if (!isSuccess) { // Inform MNO
                     status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
@@ -175,23 +161,14 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                     ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
                             requestingEntityId, response, relatesTO, startDate, iccid);
                 } else try {
+                    // The first command should return a 0 as response code.
+                    // The second should return the random challenge with tag 85
                     List<Utils.Pair<Integer, byte[]>> l = Utils.BER.decodeTLVs(response);
-                    // Look over them. First non-success code means error, first one with data and TAG = 85 =
-                    // RandomChallenge, so record it.
                     for (Utils.Pair<Integer, byte[]> x : l) {
+                        int tag = x.k & 0xFF;
                         byte[] resp = x.l;
-                        int sw1 = resp[resp.length - 2];
-                        //   int sw2 = resp[resp.length-1];
-
-                        if (!SDCommand.APDU.isSuccessCode(sw1)) hasError = true;
-                        else if (resp.length > 2) {
-                            // Get the challenge
-                            byte[] xresp = new byte[resp.length - 2];
-                            System.arraycopy(resp, 0, xresp, 0, xresp.length);
-                            // Decode as TLV with tag = 85
-                            Utils.Pair<Integer, byte[]> y = Utils.BER.decodeTLV(xresp);
-                            if (y.k == 0x85) randomChallenge = y.l; // Record randomChallenge
-                        }
+                        if (tag  == 0x85)
+                            randomChallenge = resp;
                     }
                 } catch (Exception ex) {
                     hasError = true;
@@ -219,24 +196,20 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                     // Look for DR and receipt
                     for (Utils.Pair<Integer, byte[]> x : l) {
                         byte[] resp = x.l;
-                        int sw1 = resp[resp.length - 2];
-                        //   int sw2 = resp[resp.length-1];
+                        int tag = x.k & 0xFF;
 
-                        if (!SDCommand.APDU.isSuccessCode(sw1)) hasError = true;
-                        else if (resp.length > 2) {
-                            // Get the challenge
-                            byte[] xresp = new byte[resp.length - 2];
-                            System.arraycopy(resp, 0, xresp, 0, xresp.length);
-                            // Decode as TLV with tag = 85 or 86
-                            ByteArrayInputStream in = new ByteArrayInputStream(xresp);
-                            while (in.available() > 0) {
-                                Utils.Pair<InputStream, Integer> y = Utils.BER.decodeTLV(in);
-                                byte[] xdata = Utils.getBytes(y.k);
-                                if (y.l == 0x85) DR = xdata; // Record DR
-                                else if (y.l == 0x86) receipt = xdata;
-                            }
+                        switch (tag) {
+                            case 0x85:
+                                DR = resp;
+                                break;
+                            case 0x86:
+                                receipt = resp;
+                                break;
+                            default:
+                                break; // Shouldn't happen.
                         }
                     }
+
                     if (receipt == null || hasError) {
                         status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                                 new BaseResponseType.ExecutionStatus.StatusCode("8.4", "4.2", "Execution error",
@@ -244,7 +217,6 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                         ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"), originallyTo,
                                 requestingEntityId, response, relatesTO, startDate, iccid);
                     } else {
-                        setChannelAndReceiptKeys(DR,trans.getIsdp());
                         byte[] xreceipt = ECKeyAgreementEG.computeReceipt(DR, sdin, hostID, SCP03_KEY_ID,
                                 SCP03_KEY_VERSION,
                                 ECKeyAgreementEG.INCLUDE_DERIVATION_RANDOM | ECKeyAgreementEG.CERTIFICATE_VERIFICATION_PRECEDES, receiptKey); // Check
@@ -255,7 +227,8 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                             ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"),
                                     originallyTo, requestingEntityId, response, relatesTO, startDate, iccid);
                             hasError = true;
-                        }
+                        } else
+                            setChannelAndReceiptKeys(DR,trans.getIsdp());
                     }
                 } catch (Exception ex) {
                     hasError = true;
@@ -404,7 +377,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
         }
     }
 
-    private boolean doSendData(EntityManager em, byte[] data, SmDpTransaction trans) {
+    private boolean doSendData(EntityManager em, byte[] data, SmDpTransaction trans, boolean hasMore) {
         try {
             String msgID = trans.newRequestMessageID(); // Create new one.
             String aid = trans.getIsdp().getAid(); // Get AID
@@ -422,14 +395,14 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 Date startTime = Calendar.getInstance().getTime();
                 final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
                         ".1.1", "SendData", "", ""));
-                Long trId = CommonImpl.sendData(em,sender,null,eid,msgType.value,aid,Utils.HEX.b2H(data),true,msgID,DEFAULT_VALIDITY_PERIOD,toAddress,senderRpa,status);
+                Long trId = CommonImpl.sendData(em,sender,null,eid,msgType.value,aid,Utils.HEX.b2H(data),hasMore,msgID,DEFAULT_VALIDITY_PERIOD,toAddress,senderRpa,status);
                 if (trId == null)
                     status.status = BaseResponseType.ExecutionStatus.Status.Failed;
                 resp = new SendDataResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD, status, null);
             }
             else
                 resp = proxy.sendData(sender, toAddress, null, msgID, msgType, msgID,
-                    TransactionType.DEFAULT_VALIDITY_PERIOD, eid, aid, Utils.HEX.b2H(data), true, null);
+                    TransactionType.DEFAULT_VALIDITY_PERIOD, eid, aid, Utils.HEX.b2H(data), hasMore, null);
             if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                 throw new Exception("Execution failed: " + resp);
         } catch (WSUtils.SuppressClientWSRequest wsa) {
@@ -496,13 +469,13 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 // Make data
                 ByteArrayOutputStream os = new ByteArrayOutputStream() {
                     {
-                        write(inst_p.toByteArray());
-                        write(store_data_p.toByteArray());
+                        write(inst_p.toByteArray()); // Install for perso
+                        write(store_data_p.toByteArray()); // Send certificate
                     }
                 };
                 byte[] data = os.toByteArray();
 
-                return doSendData(em, data, trans);
+                return doSendData(em, data, trans,true);
 
 
             case ESTABLISHKEYSET_SEND_DP_ECKA:
@@ -515,7 +488,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 final SDCommand apdu = ECKeyAgreementEG.isdKeySetEstablishmentSendKeyParams(randomChallenge, kp, a6,
                         ecasd_pubkey_paramRef);
                 try {
-                    return doSendData(em, apdu.toByteArray(), trans);
+                    return doSendData(em, apdu.toByteArray(), trans,true);
                 } catch (Exception ex) {
                     return false;
                 }
@@ -555,7 +528,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                                 write(c.toByteArray());
                         }
                     }.toByteArray();
-                    boolean res = doSendData(em, xdata, trans);
+                    boolean res = doSendData(em, xdata, trans,false);
                     if (end >= 0 && res) offset = end;
                     return res;
                 } catch (Exception ex) {

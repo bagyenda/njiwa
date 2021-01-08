@@ -131,55 +131,56 @@ public class ES2Impl {
     }
 
     private Euicc findOrFetchEIS(final RpaEntity smsr, final String eid) {
-        Euicc xeuicc = po.doTransaction((po, em) -> {
-            Eis eis = ES2Client.getEIS(em, smsr, eid);
-            if (eis != null) {
-                // Make a new one and save it.
-                Eis.SecurityDomain ecasd = eis.signedInfo.ecasd;
+        return po.doTransaction((po, em) ->  findOrFetchEIS(em,smsr,eid));
+    }
 
-                byte[] ecasd_pKey = null;
-                int ecasd_pref = 0;
-                // Find ecasd pub key and key param
-                try {
+    private Euicc findOrFetchEIS(EntityManager em, final RpaEntity smsr, final String eid)
+    {
+        Eis eis = ES2Client.getEIS(em, smsr, eid);
+        if (eis != null) {
+            // Make a new one and save it.
+            Eis.SecurityDomain ecasd = eis.signedInfo.ecasd;
 
-                    for (Eis.SecurityDomain.KeySet k : ecasd.keySets)
-                        if (k.type == Eis.SecurityDomain.KeySet.Type.CA) {
+            byte[] ecasd_pKey = null;
+            int ecasd_pref = 0;
+            // Find ecasd pub key and key param
+            try {
 
-                            // Go over the keysets, look for the one we want
-                            try {
-                                for (Eis.SecurityDomain.KeySet.Certificate c : k.certificates) {
-                                    Certificate.Data d = Certificate.Data.decode(c.value);
-                                    if (d.keyUsage == d.KEYAGREEMENT) {
-                                        ecasd_pKey = d.publicKeyQ;
-                                        ecasd_pref = d.publicKeyReferenceParam;
-                                        break;
-                                    }
+                for (Eis.SecurityDomain.KeySet k : ecasd.keySets)
+                    if (k.type == Eis.SecurityDomain.KeySet.Type.CA) {
+
+                        // Go over the keysets, look for the one we want
+                        try {
+                            for (Eis.SecurityDomain.KeySet.Certificate c : k.certificates) {
+                                Certificate.Data d = Certificate.Data.decode(c.value);
+                                if (d.keyUsage == d.KEYAGREEMENT) {
+                                    ecasd_pKey = d.publicKeyQ;
+                                    ecasd_pref = d.publicKeyReferenceParam;
+                                    break;
                                 }
-                            } catch (Exception ex) {
                             }
-                            break;
+                        } catch (Exception ex) {
                         }
-                } catch (Exception ex) {
-                }
-                Euicc euicc = Euicc.findByEID(em, eid);
-                // Save key information. right?
-                if (euicc == null) {
-                    euicc = new Euicc(eid, smsr.getOid(), new ArrayList<>());
-                    em.persist(euicc);
-                }
-                euicc.setEcasd_public_key_param_ref(ecasd_pref);
-                euicc.setEcasd_public_key_q(ecasd_pKey);
-                // Store them for future reference
-                euicc.setIsdR_sdin(eis.isdR.sdin);
-                euicc.setIsdR_sin(eis.isdR.sin);
-                euicc.eis = eis;
-
-                return euicc;
+                        break;
+                    }
+            } catch (Exception ex) {
             }
-            return null;
-        });
+            Euicc euicc = Euicc.findByEID(em, eid);
+            // Save key information. right?
+            if (euicc == null) {
+                euicc = new Euicc(eid, smsr.getOid(), new ArrayList<>());
+                em.persist(euicc);
+            }
+            euicc.setEcasd_public_key_param_ref(ecasd_pref);
+            euicc.setEcasd_public_key_q(ecasd_pKey);
+            // Store them for future reference
+            euicc.setIsdR_sdin(eis.isdR.sdin);
+            euicc.setIsdR_sin(eis.isdR.sin);
+            euicc.eis = eis;
 
-        return xeuicc;
+            return euicc;
+        }
+        return null;
     }
 
     @WebMethod(operationName = "DownloadProfile")
@@ -220,7 +221,7 @@ public class ES2Impl {
                         new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                                 new BaseResponseType.ExecutionStatus.StatusCode("8.7", "3.9", "SMS-SR", "Unknown " +
                                         "SM-SR")), null);
-            final Euicc euicc = findOrFetchEIS(smsr, eid);
+            final Euicc euicc = findOrFetchEIS(em, smsr, eid);
             Eis eis = euicc != null ? euicc.eis : null;
             if (eis == null)
                 return new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(),
@@ -232,6 +233,12 @@ public class ES2Impl {
                         new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
                                 new BaseResponseType.ExecutionStatus.StatusCode("8.1.1", "3.9", "EID", "No ECASD " +
                                         "Cert")), null);
+
+            // Check if the ISDP already exists...
+            if (ISDP.find(em, euicc.getId(), profileIccid) != null)
+                return new DownloadProfileResponse(startDate, Calendar.getInstance().getTime(),
+                        new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Failed,
+                                new BaseResponseType.ExecutionStatus.StatusCode("8.2.1", "1.2", "Profile ICCID", "ISDP exists")), null);
 
             ProfileTemplate profile;
             boolean byICCID = false;
@@ -381,23 +388,15 @@ public class ES2Impl {
         // Make a profile change status transaction...
 
         // Now we need to create the transaction
-        SmDpTransaction trObj = po.doTransaction(new PersistenceUtility.Runner<SmDpTransaction>() {
-            @Override
-            public SmDpTransaction run(PersistenceUtility po, EntityManager em) throws Exception {
-                ChangeProfileStatusTransaction trObj = new ChangeProfileStatusTransaction(smsr.getId(),
-                        ChangeProfileStatusTransaction.Action.ENABLE, profileIccid);
-                trObj.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
-                        Authenticator.getUser(context).getId());
-                SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
-                em.persist(tr);
-                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
-                return tr;
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
+        SmDpTransaction trObj = po.doTransaction((po, em) -> {
+            ChangeProfileStatusTransaction trObj1 = new ChangeProfileStatusTransaction(smsr.getId(),
+                    ChangeProfileStatusTransaction.Action.ENABLE, profileIccid);
+            trObj1.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
+                    Authenticator.getUser(context).getId());
+            SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj1);
+            em.persist(tr);
+            // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+            return tr;
         });
 
         if (trObj == null)
@@ -458,23 +457,15 @@ public class ES2Impl {
         // Make a profile change status transaction...
 
         // Now we need to create the transaction
-        SmDpTransaction trObj = po.doTransaction(new PersistenceUtility.Runner<SmDpTransaction>() {
-            @Override
-            public SmDpTransaction run(PersistenceUtility po, EntityManager em) throws Exception {
-                ChangeProfileStatusTransaction trObj = new ChangeProfileStatusTransaction(smsr.getId(),
-                        ChangeProfileStatusTransaction.Action.DISABLE, profileIccid);
-                trObj.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
-                        Authenticator.getUser(context).getId());
-                SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
-                em.persist(tr);
-                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
-                return tr;
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
+        SmDpTransaction trObj = po.doTransaction((po, em) -> {
+            ChangeProfileStatusTransaction trObj1 = new ChangeProfileStatusTransaction(smsr.getId(),
+                    ChangeProfileStatusTransaction.Action.DISABLE, profileIccid);
+            trObj1.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
+                    Authenticator.getUser(context).getId());
+            SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj1);
+            em.persist(tr);
+            // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+            return tr;
         });
 
         if (trObj == null)
@@ -527,22 +518,14 @@ public class ES2Impl {
                             new BaseResponseType.ExecutionStatus.StatusCode("8.1.1", "3.9", "EID", "Unknown EID")));
 
 
-        SmDpTransaction trObj = po.doTransaction(new PersistenceUtility.Runner<SmDpTransaction>() {
-            @Override
-            public SmDpTransaction run(PersistenceUtility po, EntityManager em) throws Exception {
-                UpdatePolicyRulesTransaction trObj = new UpdatePolicyRulesTransaction(smsr.getId(), iccid, pol2);
-                trObj.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
-                        Authenticator.getUser(context).getId());
-                SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
-                em.persist(tr);
-                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
-                return tr;
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
+        SmDpTransaction trObj = po.doTransaction((po, em) -> {
+            UpdatePolicyRulesTransaction trObj1 = new UpdatePolicyRulesTransaction(smsr.getId(), iccid, pol2);
+            trObj1.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
+                    Authenticator.getUser(context).getId());
+            SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj1);
+            em.persist(tr);
+            // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+            return tr;
         });
 
         if (trObj == null)
@@ -600,23 +583,15 @@ public class ES2Impl {
                             new BaseResponseType.ExecutionStatus.StatusCode("8.1.1", "3.9", "EID", "Unknown EID")));
 
 
-        SmDpTransaction trObj = po.doTransaction(new PersistenceUtility.Runner<SmDpTransaction>() {
-            @Override
-            public SmDpTransaction run(PersistenceUtility po, EntityManager em) throws Exception {
-                ChangeProfileStatusTransaction trObj = new ChangeProfileStatusTransaction(smsr.getId(),
-                        ChangeProfileStatusTransaction.Action.DELETE, profileIccid);
-                trObj.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
-                        Authenticator.getUser(context).getId());
-                SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj);
-                em.persist(tr);
-                // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
-                return tr;
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
+        SmDpTransaction trObj = po.doTransaction((po, em) -> {
+            ChangeProfileStatusTransaction trObj1 = new ChangeProfileStatusTransaction(smsr.getId(),
+                    ChangeProfileStatusTransaction.Action.DELETE, profileIccid);
+            trObj1.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo,
+                    Authenticator.getUser(context).getId());
+            SmDpTransaction tr = new SmDpTransaction(sender, euicc.getId(), validityPeriod, trObj1);
+            em.persist(tr);
+            // em.flush(); // XX Really? So we can check that iccid is unique for this euicc. Right??
+            return tr;
         });
 
         if (trObj == null)

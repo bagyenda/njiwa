@@ -16,6 +16,7 @@ import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.SDCommand;
 import io.njiwa.common.Utils;
+import io.njiwa.sr.transactions.SmSrBaseTransaction;
 
 import javax.persistence.EntityManager;
 import javax.persistence.LockModeType;
@@ -143,7 +144,7 @@ public class NotificationMessage {
     /**
      * @brief This represents a notification confirmation transaction, including how to handle its response
      */
-    public static class HandleNotificationConfirmationTransaction extends TransactionType {
+    public static class HandleNotificationConfirmationTransaction extends SmSrBaseTransaction {
 
         public Long relatesTo; // Related transaction
 

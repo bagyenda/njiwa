@@ -16,6 +16,7 @@ import io.njiwa.common.SDCommand;
 import io.njiwa.common.Utils;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.sr.model.*;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.ws.CommonImpl;
 
 import javax.persistence.EntityManager;
@@ -65,11 +66,12 @@ public class EnableProfileTransaction extends SmSrBaseTransaction implements Pro
     }
 
     @Override
-    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId, byte[]
-            response) {
+    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId) {
+        Ota.ResponseHandler.ETSI102226APDUResponses.Response r = findFirstRAPDU();
         try {
+
             responseReceived = true;
-            this.response = response;
+            this.response = r.data;
             ourTransactionId = tid;
             ProfileInfo p = em.find(ProfileInfo.class, profileID, LockModeType.PESSIMISTIC_WRITE);
             if (p == null)
@@ -91,7 +93,7 @@ public class EnableProfileTransaction extends SmSrBaseTransaction implements Pro
         }
 
         if (rtype != ResponseType.SUCCESS)
-            CommonImpl.sendEnableProfileResponse(em,this,response);
+            CommonImpl.sendEnableProfileResponse(em,this,r.data);
     }
 
     @Override

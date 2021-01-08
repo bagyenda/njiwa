@@ -23,6 +23,7 @@ import io.njiwa.dp.ws.CommonImpl;
 import io.njiwa.sr.model.AuditTrail;
 import io.njiwa.sr.model.ProfileInfo;
 import io.njiwa.sr.model.Eis;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.ws.interfaces.ES3;
 
 import javax.ejb.Asynchronous;
@@ -56,34 +57,37 @@ public class CreateISDPTransaction extends SmSrBaseTransaction {
                 try {
                     // According to Sec 4.1.1.1 of SGP 03 v3.0
                     byte[] x = Utils.HEX.h2b(eis.ISDPLOADFILEAID());
-                    write(x.length);
+                    write(x.length & 0xFF);
                     write(x);
 
                     x = Utils.HEX.h2b(eis.ISDPMODULEAID());
-                    write(x.length);
+                    write(x.length & 0xFF);
                     write(x);
 
                     x = Utils.HEX.h2b(p.getIsd_p_aid());
-                    write(x.length);
+                    write(x.length & 0xFF);
                     write(x);
-                    write(2); // Length of privileges
+                    write(3); // Length of privileges
                     int priv1 = 0x80; // Is a security domain as per GPCS sec 11.1.2
                     int priv2 = 0x80 | 0x40; // Trusted path and authorised management
-                    write(priv1);
-                    write(priv2);
-
-                    // Make install parameters
+                    write(priv1 & 0xFF);
+                    write(priv2 & 0xFF);
+                    write(0);
+                    // Make install parameters, table 10, Sec 4.1.1 of SGP.02 v4.2
                     ByteArrayOutputStream iparams = new ByteArrayOutputStream();
                     Utils.BER.appendTLV(iparams, (short) 0xC9, new byte[]{
-                            (byte) 0x81, 2, (byte) 0x81, 0x00 // SCP 81 supported. Right?
+                            (byte) 0x81, 0x02,
+                            (byte) 0x03, 0x70 // SCP 03, "i" = 70 (See sec 5.1 of GPC Ammend. D, and Sec 2.5 of SGP.02 v4.2
                     });
-                    ByteArrayOutputStream memalloced = new ByteArrayOutputStream();
-                    memalloced.write(new byte[]{(byte) 0x83, 4}); // Tag 83, size 4 as per table in Sec 4.1.1 of SGP
-                    // 03 v3.0
-                    Utils.appendEncodedInteger(memalloced, p.getAllocatedMemory(), 4);
+                    int mem = p.getAllocatedMemory();
+                    if (mem > 0) {
+                        ByteArrayOutputStream memalloced = new ByteArrayOutputStream();
+                        memalloced.write(new byte[]{(byte) 0x83, 2}); // Assume we can fit size into two bytes
+                        Utils.appendEncodedInteger(memalloced, mem, 2);
+                        Utils.BER.appendTLV(iparams, (short) 0xEF, memalloced.toByteArray());
+                    }
 
-                    Utils.BER.appendTLV(iparams, (short) 0xEF, memalloced.toByteArray());
-                    write(iparams.size());
+                    write(iparams.size() & 0xFF);
                     write(iparams.toByteArray()); // Add them
 
                     write(0x00); // Size of install token = 0
@@ -101,10 +105,11 @@ public class CreateISDPTransaction extends SmSrBaseTransaction {
 
     @Asynchronous
     @Override
-    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId, byte[]
-            response) {
+    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId) {
         String ispaid = null;
         String iccid = null;
+        Ota.ResponseHandler.ETSI102226APDUResponses r = getResponses();
+        byte[] resp = r.respData;
         try {
             ProfileInfo p = em.find(ProfileInfo.class, profileID, LockModeType.PESSIMISTIC_WRITE);
             if (p == null)
@@ -141,10 +146,10 @@ public class CreateISDPTransaction extends SmSrBaseTransaction {
 
         try {
             if (requestingEntityId == RpaEntity.LOCAL_ENTITY_ID)
-                CommonImpl.createISDPResponseHandler(em,ispaid,relatesTO,response != null ? Utils.HEX.b2H(response) : null);
+                CommonImpl.createISDPResponseHandler(em,ispaid,relatesTO, rtype == ResponseType.SUCCESS, resp != null ? Utils.HEX.b2H(resp) : null);
             else {
                 final ES3 proxy = WSUtils.getPort("http://namespaces.gsma.org/esim-messaging/1", "ES3Port", getReplyToAddress(em, "ES3"), ES3.class, RpaEntity.Type.SMSR, em, requestingEntityId);
-                proxy.createISDPResponse(sender, getReplyToAddress(em, "ES3").address, relatesTO, msgType, Utils.gregorianCalendarFromDate(startDate), Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, ispaid, response != null ? Utils.HEX.b2H(response) : null);
+                proxy.createISDPResponse(sender, getReplyToAddress(em, "ES3").address, relatesTO, msgType, Utils.gregorianCalendarFromDate(startDate), Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, ispaid, resp != null ? Utils.HEX.b2H(resp) : null);
             }
         } catch (WSUtils.SuppressClientWSRequest wsa) {
         } catch (Exception ex) {

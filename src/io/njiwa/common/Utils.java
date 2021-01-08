@@ -737,7 +737,7 @@ public class Utils {
     }
 
     public static String ridFromAID(String aid) {
-        return aid.substring(0, 11); // First 5 bytes
+        return aid.substring(0, 10); // First 5 bytes
     }
 
     public static XMLGregorianCalendar gregorianCalendarFromDate(Date t) throws Exception {

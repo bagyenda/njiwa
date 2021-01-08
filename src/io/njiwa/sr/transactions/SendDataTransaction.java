@@ -19,6 +19,7 @@ import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
 import io.njiwa.dp.ws.CommonImpl;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.ws.interfaces.ES3;
 
 import javax.ejb.Asynchronous;
@@ -69,8 +70,9 @@ public class SendDataTransaction extends SmSrBaseTransaction {
     }
 
     @Override
-    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId, byte[]
-            response) {
+    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId) {
+        Ota.ResponseHandler.ETSI102226APDUResponses r = getResponses();
+        byte[] resp = r.respData; // Get entire built data, return it.
         if (rtype == ResponseType.SUCCESS) {
             // Get stuff
             if (reqId == null)
@@ -80,11 +82,11 @@ public class SendDataTransaction extends SmSrBaseTransaction {
                 return;
             respMap.put(reqId, true);
             // Add data to output
-            int len = response == null ? 0 : response.length;
+            int len = resp == null ? 0 : resp.length;
             int oldlen = this.response.length;
             byte[] x = new byte[len + oldlen];
             System.arraycopy(this.response, 0, x, 0, oldlen);
-            System.arraycopy(response, 0, x, oldlen, response.length);
+            System.arraycopy(resp, 0, x, oldlen, resp.length);
             this.response = x;
 
             if (hasMore())

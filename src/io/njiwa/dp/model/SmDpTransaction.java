@@ -12,12 +12,14 @@
 
 package io.njiwa.dp.model;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.njiwa.common.PersistenceUtility;
 import io.njiwa.common.Utils;
 import io.njiwa.common.model.RpaEntity;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.model.TransactionsStatsListener;
+import io.njiwa.dp.transactions.SmDpBaseTransactionType;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -51,24 +53,31 @@ public class SmDpTransaction {
     @Column(nullable = false)
     private
     Long euicc;
-    @Column(nullable = false, columnDefinition = "TEXT NOT NULL", name = "requestID")
+
+    @Column(insertable = false, columnDefinition = "TEXT", name = "requestID")
     private
     String requestID; // The request ID when we forward the request
-    @Column(nullable = false)
+
+    @Column(nullable = false,columnDefinition = "timestamp not null default current_timestamp")
     private
     Date messageDate; // When added
-    @Column(nullable = false)
+
+    @Column(nullable = false,columnDefinition = "timestamp not null default current_timestamp")
     private
     Date expires;
+
     @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default current_timestamp")
     private
     Date lastResponse;
+
     @Column(nullable = false, insertable = false, columnDefinition = "timestamp not null default '1970-01-01'")
     private
     Date lastSend;
-    @Column(nullable = false, columnDefinition = "timestamp not null default '1970-01-01'")
+
+    @Column(nullable = false, columnDefinition = "text not null")
     private
     String transactionType; // The textual representation of the transaction type
+
     @Column(nullable = false, columnDefinition = "text not null default ''")
     private
     String transactionData; // JSON-encoded, of type TransactionObject
@@ -97,7 +106,7 @@ public class SmDpTransaction {
     }
 
     public SmDpTransaction(RpaEntity requestor,
-                           long euicc, long validity, TransactionType tObj) {
+                           long euicc, long validity, SmDpBaseTransactionType tObj) {
         Calendar cal = Calendar.getInstance();
         setMessageDate(cal.getTime());
         cal.add(Calendar.SECOND, (int) validity);
@@ -107,27 +116,23 @@ public class SmDpTransaction {
         setEuicc(euicc);
         setStatus(Status.Ready);
 
+        tObj.requestingEntityId = (requestor != null) ? requestor.getId() : RpaEntity.LOCAL_ENTITY_ID; // Defaults to local
 
-        if (requestor != null)
-            tObj.requestingEntityId = requestor.getId();
         setTransObect(tObj);
         setTransactionType(tObj.getClass().getName()); // Use the name
-
+        setSmsrId(tObj.smsrId);
         // setRequestID(UUID.randomUUID().toString()); // Make a random UUID
     }
 
     // Find a message from the request ID
     public static SmDpTransaction findbyRequestID(EntityManager em, String requestMessageID) {
         try {
-            // Extract UUID and ID
-            int idx = requestMessageID.lastIndexOf('-');
-            if (idx <= 0)
-                throw new Exception("Invalid request ID format");
-            long id = Long.parseLong(requestMessageID.substring(idx + 1));
-            String rId = requestMessageID.substring(0, idx);
+            Utils.Pair<Long,String> x = messageId2IdAndRId(requestMessageID);
+            long id = x.k;
+            String rid = x.l;
             return em.createQuery("from SmDpTransaction where id = :i and requestID = :r", SmDpTransaction.class)
                     .setParameter("i", id)
-                    .setParameter("r", rId)
+                    .setParameter("r", rid)
                     .setMaxResults(1)
                     .getSingleResult();
         } catch (Exception ex) {
@@ -136,11 +141,6 @@ public class SmDpTransaction {
         }
         return null;
     }
-
-    public static SmDpTransaction findbyRequestID(PersistenceUtility po, final String requestMessageID) {
-        return po.doTransaction((po1, em) -> findbyRequestID(em, requestMessageID));
-    }
-
 
 
     public Long getId() {
@@ -240,7 +240,7 @@ public class SmDpTransaction {
         if (myObj == null)
         try {
             Class cls = Class.forName(getTransactionDataClassName());
-            myObj = (TransactionType)new ObjectMapper().readValue(getTransactionData(),cls);
+            myObj = (TransactionType)(new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)).readValue(getTransactionData(),cls);
         } catch (Exception ex) {
         }
         return myObj;
@@ -279,8 +279,21 @@ public class SmDpTransaction {
         String rId = UUID.randomUUID().toString();
 
         String requestID = rId + "-" + xid;
-        setRequestID(requestID);
+        setRequestID(rId);
         return requestID;
+    }
+
+    public static Utils.Pair<Long,String> messageId2IdAndRId(String messageID) throws Exception
+    {
+        // Reverses the above.
+        // Extract UUID and ID
+        int idx = messageID.lastIndexOf('-');
+        if (idx <= 0)
+            throw new Exception("Invalid request ID format");
+        long id = Long.parseLong(messageID.substring(idx + 1));
+        String rId = messageID.substring(0, idx);
+
+        return new Utils.Pair<>(id,rId);
     }
 
     public void recordResponse(EntityManager em, String operationType, String response, boolean
@@ -292,23 +305,6 @@ public class SmDpTransaction {
 
         SmDpTransactionResponse resp = new SmDpTransactionResponse(this, operationType, response, isSuccess);
         em.persist(resp);
-    }
-
-    public void recordResponse(PersistenceUtility po, final String operation, final String response, final TransactionType.ResponseType
-            responseType)
-    {
-        po.doTransaction(new PersistenceUtility.Runner<Object>() {
-            @Override
-            public Object run(PersistenceUtility po, EntityManager em) throws Exception {
-                recordResponse(em,operation,response,responseType == TransactionType.ResponseType.SUCCESS);
-                return null;
-            }
-
-            @Override
-            public void cleanup(boolean success) {
-
-            }
-        });
     }
 
     public List<SmDpTransactionResponse> getResponses() {

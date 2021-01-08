@@ -35,6 +35,46 @@ public class SmSrBaseTransaction extends BaseTransactionType {
     private RamHttp ramHttp;
 
 
+    @Override
+    protected synchronized void processResponse(EntityManager em, long tid, ResponseType status, String reqId,
+                                                byte[] response) {
+        processResponse(em,tid,status,reqId);
+    }
+
+    protected synchronized void processResponse(EntityManager em, long tid, ResponseType status, String reqId) {
+        // To be overridden by sub-classes
+    }
+
+    private Ota.ResponseHandler.ETSI102226APDUResponses responses;
+
+    public void setResponses(Ota.ResponseHandler.ETSI102226APDUResponses responses)
+    {
+        this.responses = responses;
+    }
+
+    public Ota.ResponseHandler.ETSI102226APDUResponses getResponses()
+    {
+        return responses;
+    }
+
+    public Ota.ResponseHandler.ETSI102226APDUResponses.Response findFirstResponseByType(Ota.ResponseHandler.ETSI102226APDUResponses.Response.ResponseType type)
+    {
+        try {
+            Ota.ResponseHandler.ETSI102226APDUResponses rl = getResponses();
+            for (Ota.ResponseHandler.ETSI102226APDUResponses.Response r : rl.responses)
+                if (r.type == type)
+                    return  r;
+        } catch (Exception ex) {
+
+        }
+        return null;
+    }
+
+    public Ota.ResponseHandler.ETSI102226APDUResponses.Response findFirstRAPDU()
+    {
+        return findFirstResponseByType(Ota.ResponseHandler.ETSI102226APDUResponses.Response.ResponseType.RAPDU);
+    }
+
     public void setTransports(Sms sms, BipCatTP bipCatTP, RamHttp http) {
         this.sms = sms;
         this.bipCatTP = bipCatTP;

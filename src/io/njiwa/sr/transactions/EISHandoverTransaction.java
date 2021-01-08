@@ -23,6 +23,7 @@ import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.sr.model.AuditTrail;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.model.SmSrTransaction;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.transports.Transport;
 import io.njiwa.sr.ws.ES7Impl;
 
@@ -61,18 +62,18 @@ public class EISHandoverTransaction extends SmSrBaseTransaction {
     }
 
     @Override
-    protected synchronized void processResponse(EntityManager em, long tid, ResponseType responseType, String reqId,
-                                                byte[] response) {
+    protected synchronized void processResponse(EntityManager em, long tid, ResponseType responseType, String reqId) {
         SmSrTransaction tr = em.find(SmSrTransaction.class, tid);
         boolean hasError = !(responseType == ResponseType.SUCCESS);
 
-
+        Ota.ResponseHandler.ETSI102226APDUResponses.Response rapdu = findFirstRAPDU();
+        byte[] resp = rapdu.data;
         switch (stage) {
             case HANDOVER_EUICC:
                 // We expect the certificate
                 if (!hasError)
                     try {
-                        smsrCert = response;
+                        smsrCert = resp;
                         // Certificate already verified...
                         tr.markReadyToSend(); // Since it is waiting for expiry, tell it to go out right away
                     } catch (Exception ex) {
@@ -80,13 +81,6 @@ public class EISHandoverTransaction extends SmSrBaseTransaction {
                 break;
             case AUTHENTICATE_SMSR:
                 try {
-                    // Parse response as RAPDU
-                    Utils.Pair<Integer, byte[]> xres = Utils.BER.decodeTLV(response);
-                    byte[] resp = xres.l;
-                    // Get response code
-                    int sw1 = resp[resp.length - 2];
-                    //  int sw2 = resp[resp.length-1];
-                    hasError = !SDCommand.APDU.isSuccessCode(sw1);
                     BaseResponseType.ExecutionStatus status = hasError ? null :
                             new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status
                                     .ExecutedSuccess);
@@ -101,10 +95,7 @@ public class EISHandoverTransaction extends SmSrBaseTransaction {
                 break;
             case CREATE_ADDITIONAL_KEYSET:
                 try {
-                    Utils.Pair<Integer, byte[]> xres = Utils.BER.decodeTLV(response);
-                    byte[] resp = xres.l;
-                    int sw1 = resp[resp.length - 2];
-                    hasError = !SDCommand.APDU.isSuccessCode(sw1);
+
                     BaseResponseType.ExecutionStatus status;
                     byte[] receipt = null;
                     byte[] dr = null;

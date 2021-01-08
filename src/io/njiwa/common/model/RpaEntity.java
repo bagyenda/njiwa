@@ -565,12 +565,6 @@ public class RpaEntity {
         this.deniedIPs = deniedIPs;
     }
 
-    @Transient
-    public Boolean getHasWsKey()
-    {
-        return getWskeyStoreAlias() != null;
-    }
-
     public String getDns_name() {
         return dns_name;
     }

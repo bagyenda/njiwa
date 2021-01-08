@@ -19,6 +19,7 @@ import io.njiwa.common.model.*;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.model.SecurityDomain;
 import io.njiwa.sr.model.SmSrTransaction;
+import io.njiwa.sr.ota.Ota;
 
 import javax.persistence.EntityManager;
 import java.io.ByteArrayInputStream;
@@ -96,19 +97,14 @@ public class CreateSCP81KeySet extends SmSrBaseTransaction {
 
     // No need to sub-class sendTransaction, only receive
     @Override
-    protected synchronized void processResponse(EntityManager em, long tid, TransactionType.ResponseType responseType, String reqId,
-                                                byte[] response) {
+    protected synchronized void processResponse(EntityManager em, long tid, TransactionType.ResponseType responseType, String reqId) {
         SmSrTransaction tr = em.find(SmSrTransaction.class, tid);
         Eis eis = tr.eisEntry(em);
 
         if (responseType == TransactionType.ResponseType.SUCCESS)
             try {
-                Utils.Pair<Integer, byte[]> xres = Utils.BER.decodeTLV(response);
-                byte[] resp = xres.l;
-                // Get response code
-                int sw1 = resp[resp.length - 2];
-                if (!SDCommand.APDU.isSuccessCode(sw1))
-                    throw new Exception(String.format("Error: %s", Utils.HEX.b2H(response)));
+                Ota.ResponseHandler.ETSI102226APDUResponses.Response r = findFirstRAPDU();
+                byte[] resp = r.data;
                 byte[] dr = null;
                 byte[] receipt = null;
                 ByteArrayInputStream in = new ByteArrayInputStream(resp);

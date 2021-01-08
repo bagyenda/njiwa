@@ -26,6 +26,7 @@ import io.njiwa.sr.model.AuditTrail;
 import io.njiwa.sr.model.ProfileInfo;
 import io.njiwa.sr.model.SecurityDomain;
 import io.njiwa.sr.model.SmSrTransaction;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.transports.Transport;
 import io.njiwa.sr.ws.ES2Client;
 import io.njiwa.sr.ws.ES4Client;
@@ -81,10 +82,11 @@ public class ReceiveEISHandoverTransaction extends SmSrBaseTransaction {
     }
 
     @Override
-    protected synchronized void processResponse(EntityManager em, long tid, ResponseType responseType, String reqId,
-                                                byte[] response) {
+    protected synchronized void processResponse(EntityManager em, long tid, ResponseType responseType, String reqId) {
         SmSrTransaction tr = em.find(SmSrTransaction.class, tid);
         boolean hasError = false;
+        Ota.ResponseHandler.ETSI102226APDUResponses.Response r = findFirstRAPDU();
+        byte[] resp = r.data;
         if (status == null) {
             if (responseType == TransactionType.ResponseType.EXPIRED)
                 status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.Expired,
@@ -106,7 +108,7 @@ public class ReceiveEISHandoverTransaction extends SmSrBaseTransaction {
                         startDate);
                 break;
             case AUTHENTICATESMSR:
-                randomChallenge = response;
+                randomChallenge = resp;
                 tr.markReadyToSend(); // Force out.
 
                 break;
@@ -115,8 +117,8 @@ public class ReceiveEISHandoverTransaction extends SmSrBaseTransaction {
                 dr = new byte[drLen];
                 receipt = new byte[16];
                 // Copy back
-                System.arraycopy(response, 0, receipt, 0, receipt.length);
-                System.arraycopy(response, receipt.length, dr, 0, dr.length);
+                System.arraycopy(resp, 0, receipt, 0, receipt.length);
+                System.arraycopy(resp, receipt.length, dr, 0, dr.length);
                 try {
                     byte[] keyData = ECKeyAgreementEG.computeKeyData(ECKeyAgreementEG.KEY_QUAL_THREE_KEYS, // As per Sec 5.6.1 of SGP 02
                             // v3.1

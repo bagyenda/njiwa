@@ -19,6 +19,7 @@ import io.njiwa.sr.model.AuditTrail;
 import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.model.NotificationMessage;
 import io.njiwa.sr.model.ProfileInfo;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.ws.CommonImpl;
 
 import javax.persistence.EntityManager;
@@ -62,8 +63,7 @@ public class DeleteProfileTransaction extends SmSrBaseTransaction implements Pro
     }
 
     @Override
-    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId, byte[]
-            response) {
+    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId) {
         // Process response, report to the caller.
         try {
             ProfileInfo p = em.find(ProfileInfo.class, profileID, LockModeType.PESSIMISTIC_WRITE);
@@ -83,9 +83,10 @@ public class DeleteProfileTransaction extends SmSrBaseTransaction implements Pro
                         .ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8.4", "", "4.2", ""));
             // XXX if it was created internally, then there is no from and to
 
+            Ota.ResponseHandler.ETSI102226APDUResponses r = getResponses();
 
             AuditTrail.addAuditTrail(em, tid, AuditTrail.OperationType.DeleteProfile, status, aid, iccid, null, null);
-            CommonImpl.sendDeleteProfileResponse(em,this,response);
+            CommonImpl.sendDeleteProfileResponse(em,this,r.respData);
         } catch (Exception ex) {
             Utils.lg.severe(String.format("Failed to process response to deleteISDP [eid:%d, profile:%d]: %s",
                     eidId,

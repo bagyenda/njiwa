@@ -24,6 +24,7 @@ import io.njiwa.sr.model.Eis;
 import io.njiwa.sr.model.SecurityDomain;
 import io.njiwa.sr.model.SmSrTransaction;
 import io.njiwa.sr.ota.Ota;
+import io.njiwa.sr.transactions.SmSrBaseTransaction;
 import org.bouncycastle.tls.*;
 import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto;
 import org.bouncycastle.util.Strings;
@@ -366,14 +367,14 @@ public class RamHttp extends Transport {
 
             if (rp instanceof Ota.ResponseHandler.ETSI102226APDUResponses) {
                 SmSrTransaction bt = em.find(SmSrTransaction.class, tid, LockModeType.PESSIMISTIC_WRITE);
-                TransactionType tobj = bt.getTransObject();
+                SmSrBaseTransaction tobj = bt.getTransObject();
                 byte[] output = rp.getData();
-                Utils.Quad<Boolean, Boolean, String, Ota.ResponseHandler.ETSI102226APDUResponses> xres =
-                        Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
-                boolean success = xres.k; // Whether success
-                String xstatus = xres.m;
+                Ota.ResponseHandler.ETSI102226APDUResponses r = (Ota.ResponseHandler.ETSI102226APDUResponses) rp;
 
-                tobj.setResponses(xres.o);
+                boolean success = r.isSuccess; // Whether success
+                String xstatus = r.formattedResponse;
+
+                tobj.setResponses(r);
                 processSingleResponse(em, bt, output,   success, xstatus);
                 nextBt = success ? bt.findNextAvailableTransaction(em) : null;
                 //  em.flush(); // Right?

@@ -761,9 +761,9 @@ public class Eis {
     public synchronized ProfileInfo addNewProfile(String iccid, String mnoID, int allocMem, String smdpID) throws
             Exception {
         // Per appendix H of SGP doc, TAR range for ISDP is 00 00 10 - 00 FF FF
-        int i;
+        long i;
         String tar = "";
-        for (i = 0x000010; i <= 0x00FFFF; i++) {
+        for (i = 0x000020; i <= 0x00FFFF; i++) {
             tar = String.format("%06X", i);
             if (ProfileInfo.findProfileByTAR(this, tar, false) == null)
                 break;
@@ -775,17 +775,13 @@ public class Eis {
 
         // Get RID
         String rid = Utils.ridFromAID(loadAID);
-        // Now make PIX from TAR according to Annex H of SGP 03 v3.0
-        String aid = rid + "1010FFFFFFFF89" + tar + "00";
+        // Make PIX from TAR according to Annex H of SGP.02 v4.2
+        String aid = rid + "1010" + "FFFF" + "FFFF89" + tar + "00";
 
-        ProfileInfo p = new ProfileInfo();
-        p.setEis(this);
-        p.setIsd_p_aid(aid);
-        p.setIccid(iccid);
-        p.setMno_id(mnoID);
-        p.setSmdpOID(smdpID);
-        p.setAllocatedMemory(allocMem);
-        p.setState(ProfileInfo.State.InstallInProgress);
+        ProfileInfo p = new ProfileInfo(this,iccid,mnoID,smdpID,null,null,
+                ProfileInfo.State.InstallInProgress,aid,null,allocMem,0,
+                new ArrayList<>(),false);
+
         List<ProfileInfo> plist = getProfiles();
         if (plist == null)
             plist = new ArrayList<>();

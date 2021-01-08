@@ -22,22 +22,14 @@ public class CommonImpl {
     public static void createISDPResponseHandler(EntityManager em,
                                           String aid,
                                           String messageId,
+                                          boolean isSuccess,
                                           String data) {
-
-        boolean isSuccess;
-
          SmDpTransaction tr = SmDpTransaction.findbyRequestID(em, messageId);
         // Get the object
          DownloadProfileTransaction trObj = (DownloadProfileTransaction)tr.transactionObject();
         byte[] resp;
         try {
-            // Parse response as RAPDU. Really?
-            Utils.Pair<Integer, byte[]> xres =  Utils.BER.decodeTLV(data);
-            resp = xres.l;
-            // Get response code
-            int sw1 = resp[resp.length - 2];
-            //  int sw2 = resp[resp.length-1];
-            isSuccess = SDCommand.APDU.isSuccessCode(sw1);
+            resp = Utils.HEX.h2b(data);
         } catch (Exception ex) {
             resp = null;
             isSuccess = false;

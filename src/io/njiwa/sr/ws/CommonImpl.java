@@ -239,10 +239,12 @@ public class CommonImpl {
 
             // Make the transaction: If the profile is Enabled, first disable it. Then after that, delete it.
             ProfileInfo.State state = profileInfo.getState();
-            BaseTransactionType st;
+            SmSrBaseTransaction st;
 
-            if (state == ProfileInfo.State.Enabled) st = new DisableProfileTransaction(profileInfo, true);
-            else st = new DeleteProfileTransaction(profileInfo);
+            if (state == ProfileInfo.State.Enabled)
+                st = new DisableProfileTransaction(profileInfo, true);
+            else
+                st = new DeleteProfileTransaction(profileInfo);
             st.updateBaseData(senderEntity, receiverEntity, messageId, validityPeriod, replyTo, sender.getId());
             st.requestorType = sender.getType();
             SmSrTransaction transaction = new SmSrTransaction(em, messageType.value, messageId, receiverEntity, eid,

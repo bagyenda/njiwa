@@ -76,7 +76,7 @@ public class AuditEISTransaction extends SmSrBaseTransaction {
 
     @Override
     public synchronized void processResponse(EntityManager em, long tid, TransactionType.ResponseType rtype,
-                                             String reqId, byte[] response) {
+                                             String reqId) {
         SmSrTransaction t = em.find(SmSrTransaction.class, tid);
         Eis eis = t.eisEntry(em);
         boolean gotResult = false;
@@ -90,14 +90,12 @@ public class AuditEISTransaction extends SmSrBaseTransaction {
         if (r != null) {
             for (Ota.ResponseHandler.ETSI102226APDUResponses.Response response1 : r.responses)
                 if (response1.type == Ota.ResponseHandler.ETSI102226APDUResponses.Response.ResponseType.RAPDU) {
-                    byte[] xdata = new byte[0];
-                    int sw1 = 0;
-                    xdata = response1.data;
-                    sw1 = response1.sw1;
+                    byte[] xdata = response1.data;
+                    int sw1 = response1.sw1;
 
                     try {
                         if (!SDCommand.APDU.isSuccessCode(sw1))
-                            throw new Exception(String.format("Error: %s", Utils.HEX.b2H(response)));
+                            throw new Exception(String.format("Error: %s", Utils.HEX.b2H(xdata)));
                         gotResult = true;
                     } catch (Exception ex) {
                        continue; // Skip next..

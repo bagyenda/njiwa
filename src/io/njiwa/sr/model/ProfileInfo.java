@@ -78,7 +78,7 @@ public class ProfileInfo {
     private
     String msisdn;
 
-    @Column(name = "imsi", nullable = true, columnDefinition = "text")
+    @Column(name = "imsi", columnDefinition = "text")
     private
     String imsi;
 

@@ -19,6 +19,7 @@ import io.njiwa.common.ws.WSUtils;
 import io.njiwa.common.SDCommand;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.ws.types.WsaEndPointReference;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.ws.interfaces.ES3;
 
 import javax.ejb.Asynchronous;
@@ -51,8 +52,7 @@ public class UpdateConnectivityParamsTransaction extends SmSrBaseTransaction {
 
     @Asynchronous
     @Override
-    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId, byte[]
-            response) {
+    public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId) {
 
         if (status == null) {
             status = new BaseResponseType.ExecutionStatus(rtype == ResponseType.SUCCESS ? BaseResponseType.ExecutionStatus.Status
@@ -73,12 +73,14 @@ public class UpdateConnectivityParamsTransaction extends SmSrBaseTransaction {
                 ".com/ES3/ProfileManagentCallBack/ES3-UpdateConnectivityParameters");
 
         try {
+            Ota.ResponseHandler.ETSI102226APDUResponses r = getResponses();
             proxy.updateConnectivityParametersResponse(sender, getReplyToAddress(em, "ES3").address, relatesTO,
                     msgType,
                     Utils.gregorianCalendarFromDate(startDate),
-                    Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status, response !=
+                    Utils.gregorianCalendarFromDate(endDate), TransactionType.DEFAULT_VALIDITY_PERIOD, status,
+                    r!= null && r.respData !=
                             null ?
-                            Utils.HEX.b2H(response) : null);
+                            Utils.HEX.b2H(r.respData) : null);
 
         } catch (WSUtils.SuppressClientWSRequest wsa) {
         } catch (Exception ex) {

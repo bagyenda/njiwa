@@ -16,6 +16,7 @@ import io.njiwa.common.Utils;
 import io.njiwa.common.model.TransactionType;
 import io.njiwa.common.ws.types.BaseResponseType;
 import io.njiwa.common.SDCommand;
+import io.njiwa.sr.ota.Ota;
 import io.njiwa.sr.ws.CommonImpl;
 import io.njiwa.sr.model.*;
 
@@ -65,13 +66,14 @@ public class DisableProfileTransaction extends SmSrBaseTransaction implements Pr
     }
 
     @Override
-    public synchronized void processResponse(EntityManager em, long tid, TransactionType.ResponseType rtype, String reqId, byte[]
-            response) {
+    public synchronized void processResponse(EntityManager em, long tid, TransactionType.ResponseType rtype, String reqId) {
         String iccid = null;
         String aid = null;
+        Ota.ResponseHandler.ETSI102226APDUResponses r = getResponses();
+        byte[] resp = r.respData;
         try {
             responseReceived = true;
-            this.response = response;
+            this.response = resp;
             ourTransactionId = tid;
             ProfileInfo p = em.find(ProfileInfo.class, profileID, LockModeType.PESSIMISTIC_WRITE);
             if (p == null)
@@ -92,11 +94,12 @@ public class DisableProfileTransaction extends SmSrBaseTransaction implements Pr
                     profileID, ex));
         }
 
+
         if (rtype != TransactionType.ResponseType.SUCCESS) {
             if (deleteAfter)
-                CommonImpl.sendDeleteProfileResponse(em, this, response);
+                CommonImpl.sendDeleteProfileResponse(em, this, resp);
             else
-                CommonImpl.sendDisableProfileResponse(em, this, response);
+                CommonImpl.sendDisableProfileResponse(em, this, resp);
         }
         // Otherwise, wait for the notifications...
     }

@@ -36,17 +36,6 @@ public abstract class TransactionType {
     // *** End SM-SR stuff **
     public Long requestingEntityId; //!< The requesting RPA entity
 
-    private Ota.ResponseHandler.ETSI102226APDUResponses responses;
-
-    public void setResponses(Ota.ResponseHandler.ETSI102226APDUResponses responses)
-    {
-        this.responses = responses;
-    }
-
-    public Ota.ResponseHandler.ETSI102226APDUResponses getResponses()
-    {
-        return responses;
-    }
 
     public TransactionType() {
     }
@@ -66,20 +55,6 @@ public abstract class TransactionType {
         // To be overridden by sub-classes
     }
 
-    public synchronized final boolean handleResponse(PersistenceUtility po, final long tid, final ResponseType status,
-                                                     final String
-                                                             reqId,
-                                                     final String response)
-            throws Exception {
-        return handleResponse(po, tid, status, reqId, response != null ? Utils.HEX.h2b(response) : null);
-    }
-
-    public synchronized final boolean handleResponse(PersistenceUtility po, final long tid, final ResponseType status,
-                                                     final String
-                                                             reqId,
-                                                     final byte[] response) {
-        return po.doTransaction((po1, em) -> handleResponse(em, tid, status, reqId, response));
-    }
 
     /**
      * @param tid

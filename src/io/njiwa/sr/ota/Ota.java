@@ -23,6 +23,7 @@ import io.njiwa.common.model.TransactionType;
 import io.njiwa.sr.Session;
 import io.njiwa.sr.SmSrTransactionsPeriodicProcessor;
 import io.njiwa.sr.model.*;
+import io.njiwa.sr.transactions.SmSrBaseTransaction;
 import io.njiwa.sr.transports.Sms;
 import io.njiwa.sr.transports.Transport;
 import org.bouncycastle.crypto.BlockCipher;
@@ -689,14 +690,14 @@ public class Ota {
             // We found it!
             Transport.MessageStatus msgStatus = bt.getTransportMessageStatus(); // We need this
             SmSrTransaction.Status tstatus = bt.getStatus();
-            TransactionType tobj = bt.getTransObject();
+            SmSrBaseTransaction tobj = bt.getTransObject();
             byte[] output = resp.getData();
             boolean successPor = otaParams.responseStatusCode == 0;
-            Utils.Quad<Boolean, Boolean, String, Ota.ResponseHandler.ETSI102226APDUResponses> res =
-                    Ota.ResponseHandler.ETSI102226APDUResponses.examineResponse(output);
-            boolean success = successPor && res.k;
-            boolean retry = res.l;
-            String formattedResult = res.m;
+            ResponseHandler.ETSI102226APDUResponses r = (ResponseHandler.ETSI102226APDUResponses) resp;
+
+            boolean success = successPor && r.isSuccess;
+            boolean retry = r.retry;
+            String formattedResult = r.formattedResponse;
             boolean continueProcessing;
             Transport msgStatusHandler = msgStatus.toTransport();
 
@@ -705,7 +706,7 @@ public class Ota {
             else continueProcessing = true;
             // Run the updates, if we should continue processing
             if (continueProcessing) try {
-                tobj.setResponses(res.o);
+                tobj.setResponses(r);
                 tobj.handleResponse(em, bt.getId(), success ? TransactionType.ResponseType.SUCCESS :
                         TransactionType.ResponseType.ERROR, reqId, output);
                 // Process response and Determine if we need to send again
@@ -1147,7 +1148,7 @@ public class Ota {
      * the success or failure of the OTA commands sent
      */
     public static class ResponseHandler {
-        protected String name = "Default OTA Response Handler";
+        public final String name = "Default OTA Response Handler";
 
         public String getName() {
             return name;
@@ -1193,18 +1194,18 @@ public class Ota {
                         if (tag2 == Number_of_Executed_C_APDUS_Tag) {
                             int numApdus = data[2] & 0xFF;
                             // Skip 3 elements as per table 5.11
-                            data = Arrays.copyOfRange(data, 3, data.length - 3);
+                            data = Arrays.copyOfRange(data, 3, data.length);
                             Utils.lg.info(String.format("Received response, %d c-apdus executed, data: %s", numApdus,
                                     Utils.HEX.b2H(data)));
                         }
                     }
-                    r = new ETSI102226APDUResponses();
-
+                    // r = new ETSI102226APDUResponses();
+                    r = ETSI102226APDUResponses.parse(data); // Parse directly.
                 } else {
                     r = new GenericEuiccResponse();
-                    data = data_in;
+                    r.data = data_in;
                 }
-                r.data = data; // Store the data. Might need to parse it. Or might not.
+                //  r.data = data; // Store the data. Might need to parse it. Or might not.
                 return r;
             }
 
@@ -1220,11 +1221,17 @@ public class Ota {
 
         public static class ETSI102226APDUResponses extends RemoteAPDUStructure {
             public List<Response> responses = new ArrayList<Response>();
+            public Map<Integer, Utils.Pair<Boolean, String>> resultsMap = new HashMap<>();
+            public boolean isSuccess;
+            public boolean retry;
+            public String formattedResponse;
+            public byte[] respData;
+
+            public ETSI102226APDUResponses() {}
 
             public static ETSI102226APDUResponses parse(byte[] in) throws Exception {
                 return parse(new ByteArrayInputStream(in));
             }
-
 
             /**
              * @param xin - The input stream
@@ -1261,6 +1268,11 @@ public class Ota {
                         r.add(tag, data); // Generic response, e.g. for a SCP03t command
                 }
 
+                try {
+                    r.process();
+                } catch (Exception ex) {
+                    String xs = ex.getMessage();
+                }
                 return r;
             }
 
@@ -1304,45 +1316,17 @@ public class Ota {
                 } else return String.format("%s [last cmd #%s]", SDCommand.APDU.euiccError2Str(sw1, sw2), cmdNum);
             }
 
-            /**
-             * @param resp the returned data
-             * @return {success,retryFlag,FormattedResp}
-             * @brief parse response, tell us whether it was a success response or not. Might be over-ridden by
-             * sub-classes
-             */
-            public static Utils.Quad<Boolean, Boolean, String, Ota.ResponseHandler.ETSI102226APDUResponses> examineResponse(byte[] resp) {
-                boolean isSuccess = true, retry = false;
-                String s = "";
-                Ota.ResponseHandler.ETSI102226APDUResponses r = null;
-                try {
-
-                    r = parse(resp);
-                    Utils.Triple<Boolean, Boolean, String> res = r.process();
-                    isSuccess = res.k; // Whether success
-                    retry = res.l;
-                    s = res.m;
-                } catch (Exception ex) {
-                }
-                return new Utils.Quad<>(isSuccess, retry, s, r);
-            }
-
-            public Utils.Triple<Boolean, Boolean, String> process() throws Exception {
-                Utils.Quad<Boolean, Boolean, String, byte[]> res = process(new HashMap<>());
-                return new Utils.Triple<>(res.k, res.l, res.m);
+            @Override
+            public byte[] getData() {
+                return respData;
             }
 
             /**
-             * @return Returns a triple:
-             * First element TRUE if this processing was successful
-             * Second Element: A retry flag on failure: True if retry should be allowed/done
-             * Third element: The formatted result or null
-             * @throws Exception
-             * @brief Process an OTA expanded response, picking out success or fail:
+             * @brief Process an OTA expanded response, picking out success or fail, and keeping output data, etc.
              */
-
-            private Utils.Quad<Boolean, Boolean, String, byte[]> process(Map<Integer, Utils.Pair<Boolean, String>> resultsMap) {
+            private void process() {
                 ETSI102226APDUResponses r = this;
-                String frmt = "";
+                StringBuilder frmt = new StringBuilder();
                 ByteArrayOutputStream os = new ByteArrayOutputStream(); // Record output
 
                 String sep = "";
@@ -1367,15 +1351,16 @@ public class Ota {
                                 break;
                         }
                         String xs = String.format("%sError in command [%s]", sep, err);
-                        frmt += xs;
+                        frmt.append(xs);
                         hasError = true;
                         sep = ", ";
-                        resultsMap.put(ct, new Utils.Pair<Boolean, String>(false, xs));
+                        resultsMap.put(ct, new Utils.Pair<>(false, xs));
                         ct++;
                     } else if (rp.type == Response.ResponseType.Immediate_Action_Response) try {
-                        frmt = String.format("%sProactive sim Response [%s]", sep, Utils.HEX.b2H(rp.data));
+                        frmt = new StringBuilder(String.format("%sProactive sim Response [%s]", sep,
+                                Utils.HEX.b2H(rp.data)));
                         sep = ", ";
-                        os.write(rp.data);
+                       // os.write(rp.data);
                     } catch (Exception ex) {
                     }
                     else if (rp.type == Response.ResponseType.RAPDU) try {
@@ -1384,37 +1369,38 @@ public class Ota {
 
                         String xs = String.format("%s[Cmd<%s> <%s>", sep, formatError(0, ct, rp.sw1, rp.sw2),
                                 rp.data.length > 0 ? Utils.HEX.b2H(rp.data) : "(no resp data)");
-                        frmt += xs;
+                        frmt.append(xs);
                         hasError |= !isSuccess; // Any error is treated as a total failure. Right?
                         sep = ", ";
                         // Store in results map
-                        resultsMap.put(ct, new Utils.Pair<Boolean, String>(isSuccess, xs));
-                        os.write(rp.data); // Record response data
-                        // Write SW1 + SW2 on end
-                        os.write(new byte[]{(byte) rp.sw1, (byte) rp.sw2}); // XX make sure upper layers are aware of
-                        // this!
+                        resultsMap.put(ct, new Utils.Pair<>(isSuccess, xs));
+                        os.write(rp.data); // Record response data only
+
                         ct++;
                     } catch (Exception ex) {
                     }
                     else if (rp.type == Response.ResponseType.GenericTLV) {
                         // This is always taken is not error (let receiver handle)
-                        frmt += String.format("%s[Generic Resp <tag = %02x, data: %s>]", rp.tag,
-                                Utils.HEX.b2H(rp.data));
+                        frmt.append(String.format("%s[Generic Resp <tag = %02x, data: %s>]", rp.tag,
+                                Utils.HEX.b2H(rp.data)));
                         try {
                             Utils.BER.appendTLV(os, (short) rp.tag, rp.data); // Copy and return what was sent as-is
-                            //  os.write(rp.data);
+
                         } catch (Exception e) {
                         }
                     } // Ignore data
 
-                return new Utils.Quad<Boolean, Boolean, String, byte[]>(!hasError, false, frmt, os.toByteArray());
+                isSuccess = !hasError;
+                retry = false;
+                formattedResponse = frmt.toString();
+                respData = os.toByteArray();
             }
 
             public void add(byte[] data) {
                 int sw1 = data[data.length - 2] & 0xFF;
                 int sw2 = data[data.length - 1] & 0xFF;
                 int dlen = data.length;
-                byte[] rdata = new byte[dlen - 2 >= 0 ? dlen - 2 : 0];
+                byte[] rdata = new byte[Math.max(dlen - 2, 0)];
                 System.arraycopy(data, 0, rdata, 0, rdata.length);
                 responses.add(new Response(sw1, sw2, rdata));
             }
@@ -1438,6 +1424,7 @@ public class Ota {
             public static class Response {
                 public ResponseType type;
 
+                public Response() {}
                 public int tag;
                 public int sw1;
                 public int sw2;
@@ -1471,6 +1458,7 @@ public class Ota {
                     this.data = data;
                     this.tag = -1;
                 }
+
 
                 public enum ResponseType {BadFormat, Immediate_Action_Response, RAPDU, GenericTLV, GenericData}
             }
