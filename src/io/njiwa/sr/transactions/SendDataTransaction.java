@@ -42,8 +42,9 @@ public class SendDataTransaction extends SmSrBaseTransaction {
     public byte[] response = new byte[0];
 
     @Override
-    public Ota.ScriptChaining commandChainingType(Eis eis, Boolean moreToFollow) {
+    public Ota.ScriptChaining commandChainingType(Ota.Params params,  Boolean moreToFollow) {
         // Annex K of SGP.02 v4.2
+        Eis eis = params.eis;
         boolean active = Utils.toBool(eis.getScriptChainingActive());
         boolean useChaining = false;
         boolean more = Utils.toBool(moreToFollow);
@@ -74,7 +75,10 @@ public class SendDataTransaction extends SmSrBaseTransaction {
                 byte[] cmd = cAPDUs.get(0);
                 Utils.Pair<Integer, byte[]> x = Utils.BER.decodeTLV(cmd);
                 int tag = x.k;
-                useChaining = tag == 0x84 || tag == 0x85 || tag == 0x86;
+                if (tag == 0x84 || tag == 0x85)
+                    useChaining = true;
+                else if (tag == 0x86)
+                    useChaining = this.index < this.cAPDUs.size() -1; // We are not at last command
             } catch (Exception ex) {}
 
         if (useChaining)

@@ -76,7 +76,7 @@ public class SmSrBaseTransaction extends BaseTransactionType {
     }
 
     // Overridden by sub-classes.
-    public Ota.ScriptChaining commandChainingType(Eis eis, Boolean moreToFollow)
+    public Ota.ScriptChaining commandChainingType(Ota.Params params, Boolean moreToFollow)
     {
         return  null;
     }
@@ -117,7 +117,8 @@ public class SmSrBaseTransaction extends BaseTransactionType {
         final Transport finalTransport = sender;
         final Transport.Context finalCtx = ctx;
         Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, capdus, startIndex,
-                (l) -> finalTransport.hasEnoughBuffer(finalCtx, (int) l), trObj.commandChainingType(eis,tr.getMoreToFollow()));
+                (l) -> finalTransport.hasEnoughBuffer(finalCtx, (int) l),
+                trObj.commandChainingType(otaParams,  tr.getMoreToFollow()));
         Session gwsession = new Session(em, eis);
         String reqId = otaParams.mkRequestID();
 

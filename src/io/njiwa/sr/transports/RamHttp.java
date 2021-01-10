@@ -217,7 +217,7 @@ public class RamHttp extends Transport {
 
         SmSrBaseTransaction ttype = bt.getTransObject();
         if (!ttype.hasMore()) return null;
-        Ota.ScriptChaining chaining = ttype.commandChainingType(otaParams.eis,bt.getMoreToFollow());
+        Ota.ScriptChaining chaining = ttype.commandChainingType(otaParams, bt.getMoreToFollow());
         Utils.Pair<byte[], Integer> xres = Ota.mkOTAPkg(otaParams, ttype.cAPDUs, ttype.index,
                 (l) -> l < DEFAULT_HTTP_BUFFER_LEN,chaining);
         ttype.lastIndex = xres.l;

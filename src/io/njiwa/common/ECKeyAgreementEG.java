@@ -61,7 +61,7 @@ public class ECKeyAgreementEG {
     public static final byte[] GPC_A_SUBJECT_IDENTIFIER_TAG = {0x5F, 0x20};
     public static final byte[] GPC_A_CERT_EFFECTIVE_DATE_TAG = {0x5F, 0x25};
     public static final byte[] GPC_A_CERT_EXPIRY_DATE_TAG = {0x5F, 0x24};
-    
+
     //1. To generate the ephemeral keys, we We follow this (except for the KDF bit): https://neilmadden.wordpress
     // .com/2016/05/20/ephemeral-elliptic-curve-diffie-hellman-key-agreement-in-java/
     //2. To generate the Shared secret, use http://grepcode.com/file/repo1.maven.org/maven2/org

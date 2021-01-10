@@ -596,9 +596,6 @@ public class Ota {
 
         if ((otaParams.spi2 & 0x03) == 0) otaParams.forceDLR = true; // Force DLR tracking
 
-        if (chainingType == null)
-            chainingType = ScriptChaining.fromOTAParams(startIndex, l.size());
-
         final byte[] sdata = otaParams.allowChaining ? chainingType.toBytes() : new byte[0]; // Put script chaining
         // data in first
         int cursize = sdata.length + (ServerSettings.Constants.useIndefiniteCodingInExpandedFormat ? 2 : 1 + 4); //
@@ -765,16 +762,7 @@ public class Ota {
     public enum ScriptChaining {
         NOCHAINING, FIRST_SCRIPT_DELETE_ON_RESET, FIRST_SCRIPT_KEEP_ON_RESET, SUBSEQUENT_SCRIPT_MORE_TO_FOLLOW,
         LAST_SCRIPT;
-
-        public static ScriptChaining fromOTAParams(int startPos, int len) {
-            boolean firstData = startPos == 0;
-            boolean lastData = startPos >= len - 1;
-            if (firstData && lastData) return NOCHAINING;
-            else if (firstData) return FIRST_SCRIPT_DELETE_ON_RESET;
-            else if (lastData) return LAST_SCRIPT;
-            else return SUBSEQUENT_SCRIPT_MORE_TO_FOLLOW;
-        }
-
+        
         public static boolean chainEnds(ScriptChaining c)
         {
             return c == null || c == NOCHAINING || c == LAST_SCRIPT;
