@@ -61,9 +61,7 @@ public class ECKeyAgreementEG {
     public static final byte[] GPC_A_SUBJECT_IDENTIFIER_TAG = {0x5F, 0x20};
     public static final byte[] GPC_A_CERT_EFFECTIVE_DATE_TAG = {0x5F, 0x25};
     public static final byte[] GPC_A_CERT_EXPIRY_DATE_TAG = {0x5F, 0x24};
-
-    private static final boolean FAKE_CERT_EXPIRE_DATE = true; // We can fake the certificate expiry date during testing...
-
+    
     //1. To generate the ephemeral keys, we We follow this (except for the KDF bit): https://neilmadden.wordpress
     // .com/2016/05/20/ephemeral-elliptic-curve-diffie-hellman-key-agreement-in-java/
     //2. To generate the Shared secret, use http://grepcode.com/file/repo1.maven.org/maven2/org
@@ -393,10 +391,7 @@ public class ECKeyAgreementEG {
         Utils.BER.appendTLV(os, (byte) 0x95, keyUsageQual);
         Date startDate = cert.getNotBefore();
         Date expDate = cert.getNotAfter();
-        if (FAKE_CERT_EXPIRE_DATE) {
-            long epoch = System.currentTimeMillis();
-            expDate = new Date(epoch + (3600*24*30*6*1000L));
-        }
+
         SimpleDateFormat df = new SimpleDateFormat("yyyMMdd");
         if (startDate != null)
             Utils.BER.appendTLV(os, GPC_A_CERT_EFFECTIVE_DATE_TAG,
