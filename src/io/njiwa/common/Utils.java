@@ -20,11 +20,7 @@ import org.bouncycastle.asn1.*;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.cert.jcajce.JcaCertStore;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cms.*;
-import org.bouncycastle.cms.jcajce.JcaSignerInfoGeneratorBuilder;
-import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
 import org.bouncycastle.crypto.BlockCipher;
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.macs.CMac;
@@ -36,11 +32,7 @@ import org.bouncycastle.jce.spec.ECNamedCurveSpec;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
-import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.util.BigIntegers;
-import org.bouncycastle.util.Store;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -430,7 +422,7 @@ public class Utils {
         System.arraycopy(haystack, 0, data, 0, idx); // Copy first part
         System.arraycopy(replacement, 0, data, idx, replacement.length); // Copy the replacement in place...
         System.arraycopy(haystack, idx + needle.length, data, idx + replacement.length,
-        haystack.length - needle.length);
+                haystack.length - needle.length);
 
         return data;
     }
@@ -446,7 +438,7 @@ public class Utils {
      * @brief Get content from URL, return status, reply headers, content
      */
     public static Triple<Integer, Map<String, String>, String> getUrlContent(String url, HttpRequestMethod method,
-     Map<String, String> req_hdr, List<Pair<String, String>> cgi_params, Session context) throws Exception {
+                                                                             Map<String, String> req_hdr, List<Pair<String, String>> cgi_params, Session context) throws Exception {
 
         // Deal with params
         String parms = "";
@@ -1358,7 +1350,7 @@ public class Utils {
 
         public static Node findNode(NodeList nl, String tagname) {
             return findNode(nl,
-(Node o) -> (o.getNodeType() == Node.ELEMENT_NODE && o.getNodeName().equalsIgnoreCase(tagname)));
+             (Node o) -> (o.getNodeType() == Node.ELEMENT_NODE && o.getNodeName().equalsIgnoreCase(tagname)));
         }
 
         public static Node findNode(Node n, Predicate<Node> pred) {
@@ -1489,7 +1481,7 @@ public class Utils {
          * @brief known curves according to Table 4-3 of GPC Ammendment E, and Table 24 of SGP.02 v4.1
          */
         private static final Map<Integer, AlgorithmParameterSpec> KNOWN_ECC_CURVES = new ConcurrentHashMap<Integer,
-                    AlgorithmParameterSpec>() {{
+         AlgorithmParameterSpec>() {{
             put(0, new ECGenParameterSpec("P-256"));
             put(1, new ECGenParameterSpec("P-384"));
             put(2, new ECGenParameterSpec("P-512"));
@@ -1509,7 +1501,7 @@ public class Utils {
                     "F1FD178C0B3AD58F10126DE8CE42435B3961ADBCABC8CA6DE8FCF353D86E9C03", 16));
             EllipticCurve curve = new EllipticCurve(p, a, b);
             ECPoint G = ECPointUtil.decodePoint(curve, HEX.h2b("04" +
-            "B6B3D4C356C139EB31183D4749D423958C27D2DCAF98B70164C97A2DD98F5CFF" +
+ "B6B3D4C356C139EB31183D4749D423958C27D2DCAF98B70164C97A2DD98F5CFF" +
             "6142E0F7C8B204911F9271F0F3ECEF8C2701C307E8E4C9E183115A1554062CFB"));
             BigInteger n = new BigInteger("F1FD178C0B3AD58F10126DE8CE42435B53DC67E140D2BF941FFDD459C6D655E1", 16);
             put(0x40, new ECParameterSpec(curve, G, n, 1)); // Defined in Table 24 of SGP.02 v4.1 only.
@@ -1644,74 +1636,6 @@ public class Utils {
             else return "SHA512withECDSA";
         }
 
-        public static byte[] genpkcs7sig(byte[] msg, X509Certificate certificate, PrivateKey privateKey) throws Exception {
-            // See https://www.bouncycastle.org/docs/pkixdocs1.5on/org/bouncycastle/cms/CMSSignedDataGenerator.html
-            CMSTypedData data = new CMSProcessableByteArray(msg);
-            List<X509Certificate> cL = new ArrayList<>();
-            cL.add(certificate);
-            Store certs = new JcaCertStore(cL);
-
-            CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
-            String algo = getHashAlgo((ECPrivateKey) privateKey);
-            ContentSigner cs =
-             new JcaContentSignerBuilder(algo).setProvider(ServerSettings.Constants.jcaProvider).build(privateKey);
-            gen.addSignerInfoGenerator(new JcaSignerInfoGeneratorBuilder(new JcaDigestCalculatorProviderBuilder().setProvider(ServerSettings.Constants.jcaProvider).build()).build(cs, certificate));
-            gen.addCertificates(certs);
-            CMSSignedData csd = gen.generate(data, true); // Include data
-
-            return csd.getEncoded();
-        }
-
-        public static byte[] verifypkcs7sig(byte[] signedData, X509Certificate ciCert) throws Exception {
-            // More at:
-            // https://stackoverflow.com/questions/13550712/read-original-data-from-signed-content-java
-            // and
-            // https://www.bouncycastle.org/docs/pkixdocs1.5on/org/bouncycastle/cms/CMSSignedData.html
-            CMSSignedData s = new CMSSignedData(signedData);
-            SignerInformationStore signers = s.getSignerInfos();
-            Collection<SignerInformation> c = signers.getSigners();
-
-            for (SignerInformation signer : c) {
-                if (signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider(ServerSettings.Constants.jcaProvider).build(ciCert))) {
-                    // We got it, so, return the data.
-                    return (byte[]) s.getSignedContent().getContent();
-                }
-            }
-            throw new Exception("Invalid signature");
-        }
-
-        public static byte[] sign(ECPrivateKey key, byte[] data) throws Exception {
-            String algo = Utils.ECC.getHashAlgo(key);
-            java.security.Signature ecdaSign = java.security.Signature.getInstance(algo,
-             ServerSettings.Constants.jcaProvider);
-            ecdaSign.initSign(key);
-
-            ecdaSign.update(data);
-            return ecdaSign.sign();
-        }
-
-        /**
-         * @param key
-         * @param signature
-         * @param data
-         * @return
-         * @throws Exception
-         * @brief validate X9.62 signature, given public key.
-         */
-        public static boolean verifySignature(ECPublicKey key, byte[] signature, byte[] data) throws Exception {
-            String algo = ECC.getHashAlgo(key);
-            java.security.Signature ecdaSign = java.security.Signature.getInstance(algo,
- ServerSettings.Constants.jcaProvider);
-            ecdaSign.initVerify(key);
-            ecdaSign.update(data);
-            return ecdaSign.verify(signature);
-        }
-
-        public static boolean verifySignature(X509Certificate cert, byte[] signature, byte[] data) throws Exception {
-            ECPublicKey key = (ECPublicKey) cert.getPublicKey();
-            return verifySignature(key, signature, data);
-        }
-
         public static KeyPair genKeyPair(AlgorithmParameterSpec parameterSpec) throws Exception {
             KeyPairGenerator g = KeyPairGenerator.getInstance("ECDSA", ServerSettings.Constants.jcaProvider);
             g.initialize(parameterSpec, new SecureRandom());
@@ -1733,7 +1657,9 @@ public class Utils {
         public static class Signature {
             public BigInteger r, s; // The parameters as per BSI TR 03111, Sec 5
 
-            public Signature() {}
+            public Signature() {
+            }
+
             public Signature(BigInteger r, BigInteger s) {
                 this.r = r;
                 this.s = s;
@@ -1764,6 +1690,39 @@ public class Utils {
                     System.arraycopy(sig, size, d, 0, size);
                     this.s = BigIntegers.fromUnsignedByteArray(d);
                 }
+            }
+
+
+            public static byte[] sign(ECPrivateKey key, byte[] data) throws Exception {
+                String algo = ECC.getHashAlgo(key);
+                java.security.Signature ecdaSign = java.security.Signature.getInstance(algo,
+                 ServerSettings.Constants.jcaProvider);
+                ecdaSign.initSign(key);
+
+                ecdaSign.update(data);
+                return ecdaSign.sign();
+            }
+
+            /**
+             * @param key
+             * @param signature
+             * @param data
+             * @return
+             * @throws Exception
+             * @brief validate X9.62 signature, given public key.
+             */
+            public static boolean verify(ECPublicKey key, byte[] signature, byte[] data) throws Exception {
+                String algo = ECC.getHashAlgo(key);
+                java.security.Signature ecdaSign = java.security.Signature.getInstance(algo,
+                 ServerSettings.Constants.jcaProvider);
+                ecdaSign.initVerify(key);
+                ecdaSign.update(data);
+                return ecdaSign.verify(signature);
+            }
+
+            public static boolean verify(X509Certificate cert, byte[] signature, byte[] data) throws Exception {
+                ECPublicKey key = (ECPublicKey) cert.getPublicKey();
+                return verify(key, signature, data);
             }
 
             public byte[] encodeX962() throws Exception {
@@ -2139,7 +2098,7 @@ public class Utils {
                     boolean wildcard_domain = c.domain.charAt(0) == '.' && c.domain.indexOf('.', 1) > 0;
                     boolean domains_match = domain != null && domainMatches(domain, c.domain);
                     boolean suffix_match =
- domains_match && ((r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0);
+                     domains_match && ((r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0);
 
                     if (path_matches && (explicit_domain == false || wildcard_domain && domains_match && suffix_match))
                         res.add(c); // Add it
@@ -2562,7 +2521,7 @@ public class Utils {
                 xos.write("\r\n".getBytes(StandardCharsets.UTF_8));
                 if (xhasBody) {
                     byte[] pre = (useChunked) ?
-                     String.format("%X\r\n", body.length).getBytes(StandardCharsets.UTF_8) : new byte[0];
+                String.format("%X\r\n", body.length).getBytes(StandardCharsets.UTF_8) : new byte[0];
                     byte[] post = (useChunked) ? "\r\n".getBytes(StandardCharsets.UTF_8) : new byte[0];
 
                     xos.write(pre);
@@ -2616,7 +2575,7 @@ public class Utils {
              * @brief Make a HTTP Request directly
              */
             public Request(Method method, String uri, Map<String, String> rHeaders, byte[] body, boolean closeConn,
-                String ctype) {
+             String ctype) {
                 version = 1.1;
 
                 this.method = method;
@@ -2753,7 +2712,7 @@ public class Utils {
             @Override
             protected void printFirstLine(OutputStream out) throws Exception {
                 String xs = String.format("HTTP/%.1f %s %s", version, status.getStatusCode(), statusMsg != null ?
-                 statusMsg : status.getReasonPhrase());
+statusMsg : status.getReasonPhrase());
                 out.write(xs.getBytes(StandardCharsets.UTF_8));
             }
 

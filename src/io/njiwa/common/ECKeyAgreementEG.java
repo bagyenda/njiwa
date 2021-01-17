@@ -344,17 +344,18 @@ public class ECKeyAgreementEG {
                                                                              ephemeralKeys,
                                                                      final byte[] a6crt, int keyRef) throws
             Exception {
+        ECPrivateKey skey = (ECPrivateKey)ServerSettings.getServerECDAPrivateKey();
         byte[] ePk = Utils.ECC.encode((ECPublicKey) ephemeralKeys.getPublic(), keyRef);
         //Make the signable object, Table 81 or SGP v3.1
         ByteArrayOutputStream os = new ByteArrayOutputStream() {
             {
                 Utils.BER.appendTLV(this, SGP02_KEY_ESTABLISHMENT_TAG, a6crt);
                 Utils.BER.appendTLV(this, SGP02_PUBLIC_KEY_TAG, ePk);
+                Utils.BER.appendTLV(this,  new byte[] { 0x00, (byte)0x85}, randomChallenge);
             }
         };
-        // Make signing data and sign it
-        Utils.BER.appendTLV(os,  new byte[] { 0x00, (byte)0x85}, randomChallenge);
-        byte[] sig = Utils.ECC.sign((ECPrivateKey) ephemeralKeys.getPrivate(), os.toByteArray());
+
+        byte[] sig = Utils.ECC.Signature.sign(skey, os.toByteArray()); // Signed with our key, as per spec...
         byte[] plainSig = new Utils.ECC.Signature(sig,true).encodePlain((ECPublicKey)ephemeralKeys.getPublic());
         return isdKeySetEstablishmentSendKeyParams(ePk, a6crt, plainSig);
     }
@@ -434,7 +435,7 @@ public class ECKeyAgreementEG {
     }
 
     public static byte[] genCertificateSignature(PrivateKey key, byte[] certSigData) throws Exception {
-        return Utils.ECC.sign((ECPrivateKey) key, certSigData);
+        return Utils.ECC.Signature.sign((ECPrivateKey) key, certSigData);
     }
 
 }

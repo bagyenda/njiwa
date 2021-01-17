@@ -146,7 +146,7 @@ public class ES7Impl {
                     ECPublicKey pkey = (ECPublicKey) x509Certificate.getPublicKey();
                     // Verify signature.
                     byte[] sdata = xcertData.makeCertificateSigData();
-                    boolean verified = Utils.ECC.verifySignature(pkey, xcertData.signature, sdata);
+                    boolean verified = Utils.ECC.Signature.verify(pkey, xcertData.signature, sdata);
                     if (!verified)
                         throw new Exception("Invalid: Signature verification failed");
                     // Look for Object

@@ -61,7 +61,7 @@ public class Settings {
         byte[] signingData = ECKeyAgreementEG.makeCertSigningData(certificate, certType, additionalTLVs,
                 ECKeyAgreementEG.KEY_AGREEMENT_USAGE);
         // Verify signature
-        boolean result = Utils.ECC.verifySignature(ciCert, signedData, signingData);
+        boolean result = Utils.ECC.Signature.verify(ciCert, signedData, signingData);
         if (!result) throw new Exception("Invalid signature!");
 
         return new Utils.ECC.Signature(signedData,true).encodePlain(ciCert);
