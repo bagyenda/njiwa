@@ -12,6 +12,7 @@
 
 package io.njiwa.dp.model;
 
+import io.njiwa.common.Utils;
 import io.njiwa.sr.ws.types.Eis;
 
 import javax.persistence.*;
@@ -30,6 +31,8 @@ import java.util.List;
 )
 @SequenceGenerator(name = "dp_euicc", sequenceName = "dp_euiccs_seq")
 public class Euicc {
+
+
     @Transient
     public Eis eis; // Temporarily stored here
     @Id
@@ -164,4 +167,5 @@ public class Euicc {
     public void setIsdR_sdin(String isdR_sdin) {
         this.isdR_sdin = isdR_sdin;
     }
+
 }

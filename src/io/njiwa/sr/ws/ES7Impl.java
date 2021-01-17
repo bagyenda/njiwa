@@ -132,50 +132,42 @@ public class ES7Impl {
         final Certificate.Data xcertData = certData;
         if (certData.publicKeyQ != null)
             // Look for the preparehandover
-            po.doTransaction(new PersistenceUtility.Runner<Long>() {
-                @Override
-                public Long run(PersistenceUtility po, EntityManager em) throws Exception {
-                    SmSrTransaction tr = SmSrTransaction.findTransaction(em, eis.signedInfo.eid,
-                            ES4.ES4_PREPARE_SMSRCHANGE,
-                            SmSrTransaction.Status.Ready);
-                    try {
-                        RpaEntity eum = RpaEntity.getByOID(em, eis.signedInfo.eumId, RpaEntity.Type.EUM);
-                        if (eum == null)
-                            throw new Exception("Invalid. No such EUM");
-                        // Assume it has been validated.
-                        X509Certificate x509Certificate = eum.secureMessagingCert();
+            po.doTransaction((po, em) -> {
+                SmSrTransaction tr = SmSrTransaction.findTransaction(em, eis.signedInfo.eid,
+                        ES4.ES4_PREPARE_SMSRCHANGE,
+                        SmSrTransaction.Status.Ready);
+                try {
+                    RpaEntity eum = RpaEntity.getByOID(em, eis.signedInfo.eumId, RpaEntity.Type.EUM);
+                    if (eum == null)
+                        throw new Exception("Invalid. No such EUM");
+                    // Assume it has been validated.
+                    X509Certificate x509Certificate = eum.secureMessagingCert();
 // Get certificate.
-                        ECPublicKey pkey = (ECPublicKey) x509Certificate.getPublicKey();
-                        // Verify signature.
-                        byte[] sdata = xcertData.makeCertificateSigData();
-                        boolean verified = Utils.ECC.verifySignature(pkey, xcertData.signature, sdata);
-                        if (!verified)
-                            throw new Exception("Invalid: Signature verification failed");
-                        // Look for Object
-                        ReceiveEISHandoverTransaction trObj = (ReceiveEISHandoverTransaction) tr.getTransObject();
-                        if (trObj.stage != ReceiveEISHandoverTransaction.Stage.START)
-                            throw new Exception("Invalid state");
-                        trObj.eis = eis; // Store eis
-                        trObj.pk_ecasd_ecka = xcertData.publicKeyQ;
-                        trObj.pk_ecasd_param = xcertData.publicKeyReferenceParam;
-                        trObj.oldSmsR = Authenticator.getUser(context).getOid(); // Store old SMSRId
-                        trObj.stage = trObj.stage.next(); // Push to next stage
-                        tr.setNextSend(startTime); // Send out immediately
-                    } catch (Exception ex) {
-                        status.status = BaseResponseType.ExecutionStatus.Status.Failed;
-                        status.statusCodeData.subjectCode = "8.1.1";
-                        status.statusCodeData.reasonCode = "1.1";
-                        status.statusCodeData.message = msg;
-                        Utils.lg.severe(String.format("Error in ES4.handover: %s", ex));
-                        return null;
-                    }
-                    return tr.getId();
+                    ECPublicKey pkey = (ECPublicKey) x509Certificate.getPublicKey();
+                    // Verify signature.
+                    byte[] sdata = xcertData.makeCertificateSigData();
+                    boolean verified = Utils.ECC.verifySignature(pkey, xcertData.signature, sdata);
+                    if (!verified)
+                        throw new Exception("Invalid: Signature verification failed");
+                    // Look for Object
+                    ReceiveEISHandoverTransaction trObj = (ReceiveEISHandoverTransaction) tr.getTransObject();
+                    if (trObj.stage != ReceiveEISHandoverTransaction.Stage.START)
+                        throw new Exception("Invalid state");
+                    trObj.eis = eis; // Store eis
+                    trObj.pk_ecasd_ecka = xcertData.publicKeyQ;
+                    trObj.pk_ecasd_param = xcertData.publicKeyReferenceParam;
+                    trObj.oldSmsR = Authenticator.getUser(context).getOid(); // Store old SMSRId
+                    trObj.stage = trObj.stage.next(); // Push to next stage
+                    tr.setNextSend(startTime); // Send out immediately
+                } catch (Exception ex) {
+                    status.status = BaseResponseType.ExecutionStatus.Status.Failed;
+                    status.statusCodeData.subjectCode = "8.1.1";
+                    status.statusCodeData.reasonCode = "1.1";
+                    status.statusCodeData.message = msg;
+                    Utils.lg.severe(String.format("Error in ES4.handover: %s", ex));
+                    return null;
                 }
-
-                @Override
-                public void cleanup(boolean success) {
-
-                }
+                return tr.getId();
             });
         return new BaseResponseType(startTime, Calendar.getInstance().getTime(), validityPeriod, status);
     }

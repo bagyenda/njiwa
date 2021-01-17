@@ -46,8 +46,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 /**
  * @brief Represents a downloadProfile transactions (see Sec 5.3.2 of SGP 02 v3.1
  */
-public class DownloadProfileTransaction extends SmDpBaseTransactionType implements
-        ProfileTemplate.ConnectivityParams {
+public class DownloadProfileTransaction extends SmDpBaseTransactionType implements ProfileTemplate.ConnectivityParams {
     public static final byte SCP03_KEY_VERSION = 0x03;
     public static final byte SCP03_KEY_ID = 0x01;
     private static final int MAXIMUM_PROFILE_SEGMENT_LENGTH = 512;
@@ -64,8 +63,9 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
     public byte[] sin;
     public byte[] ecasd_pubkey;
     public int ecasd_pubkey_paramRef;
-   // public byte[] secureChannelBaseKey;
     public byte[] receiptKey;
+
+    public long platformVersion; // We need to distinguish v3.1 from newer ones, since key establishment APDUs are slightly different.
 
     // The ephemeral  keys
     public byte[] eSK_DP_ECKA, ePK_DP_ECKA;
@@ -103,6 +103,8 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
         scp03Sessions = new ConcurrentLinkedDeque<>();
         eUICCId = euicc.getId();
         eid = euicc.getEid();
+        String osVersion = euicc.eis.signedInfo.platformVersion;
+        platformVersion = Utils.platformVersion(osVersion); // Record version...
     }
 
     private void setChannelAndReceiptKeys(byte[] dr, ISDP isdp) throws Exception {
@@ -126,8 +128,8 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
         List<KeyComponent> cl = new ArrayList<>();
         cl.add(new KeyComponent(secureChannelBaseKey, KeyComponent.Type.AES));
         List<Key> kl = new ArrayList<>();
-        kl.add(new Key(SCP03_KEY_ID,null,cl));
-        l.add(new KeySet(SCP03_KEY_VERSION, KeySet.Type.SCP03, new ArrayList<>(),kl,0L));
+        kl.add(new Key(SCP03_KEY_ID, null, cl));
+        l.add(new KeySet(SCP03_KEY_VERSION, KeySet.Type.SCP03, new ArrayList<>(), kl, 0L));
     }
 
     @Override
@@ -167,8 +169,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                     for (Utils.Pair<Integer, byte[]> x : l) {
                         int tag = x.k & 0xFF;
                         byte[] resp = x.l;
-                        if (tag  == 0x85)
-                            randomChallenge = resp;
+                        if (tag == 0x85) randomChallenge = resp;
                     }
                 } catch (Exception ex) {
                     hasError = true;
@@ -227,8 +228,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                             ES2Client.sendDownloadProfileResponse(em, status, getReplyToAddress(em, "ES2"),
                                     originallyTo, requestingEntityId, response, relatesTO, startDate, iccid);
                             hasError = true;
-                        } else
-                            setChannelAndReceiptKeys(DR,trans.getIsdp());
+                        } else setChannelAndReceiptKeys(DR, trans.getIsdp());
                     }
                 } catch (Exception ex) {
                     hasError = true;
@@ -386,22 +386,22 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
             WsaEndPointReference sender = es3.m;
             final String toAddress = es3.k;
 
-            final Holder<String> msgType = new Holder<>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
-                    "-SendData");
+            final Holder<String> msgType = new Holder<>("http://gsma" + ".com/ES3/ProfileManagement/ES3" + "-SendData");
 
             SendDataResponse resp;
             if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
                 Date startTime = Calendar.getInstance().getTime();
-                final BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" +
-                        ".1.1", "SendData", "", ""));
-                Long trId = CommonImpl.sendData(em,sender,null,eid,msgType.value,aid,Utils.HEX.b2H(data),hasMore,msgID,DEFAULT_VALIDITY_PERIOD,toAddress,senderRpa,status);
-                if (trId == null)
-                    status.status = BaseResponseType.ExecutionStatus.Status.Failed;
-                resp = new SendDataResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD, status, null);
-            }
-            else
+                final BaseResponseType.ExecutionStatus status =
+                        new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess,
+                                new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "SendData", "", ""));
+                Long trId = CommonImpl.sendData(em, sender, null, eid, msgType.value, aid, Utils.HEX.b2H(data),
+                        hasMore, msgID, DEFAULT_VALIDITY_PERIOD, toAddress, senderRpa, status);
+                if (trId == null) status.status = BaseResponseType.ExecutionStatus.Status.Failed;
+                resp = new SendDataResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD,
+                        status, null);
+            } else
                 resp = proxy.sendData(sender, toAddress, null, msgID, msgType, msgID,
-                    TransactionType.DEFAULT_VALIDITY_PERIOD, eid, aid, Utils.HEX.b2H(data), hasMore, null);
+                        TransactionType.DEFAULT_VALIDITY_PERIOD, eid, aid, Utils.HEX.b2H(data), hasMore, null);
             if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                 throw new Exception("Execution failed: " + resp);
         } catch (WSUtils.SuppressClientWSRequest wsa) {
@@ -430,22 +430,23 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                     final ES3 proxy = es3.l;
                     WsaEndPointReference sender = es3.m;
 
-                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
-                            "-CreateISDP");
+                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3"
+                            + "-CreateISDP");
                     CreateISDPResponse resp;
                     if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
                         Date startTime = Calendar.getInstance().getTime();
-                        BaseResponseType.ExecutionStatus status = new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess,
-                                new BaseResponseType.ExecutionStatus.StatusCode("8" +
-                                        ".1.1", "CreateISDP", "", ""));
-                        Long trId = CommonImpl.createISDP(em,eid,status,iccid,mnoOID,sender,toAddress,msgID,DEFAULT_VALIDITY_PERIOD,null,msgType,profileTemplate.getRequiredMemory(),true,senderRpa);
-                        if (trId == null)
-                            status.status = BaseResponseType.ExecutionStatus.Status.Failed;
-                        resp = new CreateISDPResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD/**/, status, null, null);
+                        BaseResponseType.ExecutionStatus status =
+                                new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "CreateISDP", "", ""));
+                        Long trId = CommonImpl.createISDP(em, eid, status, iccid, mnoOID, sender, toAddress, msgID,
+                                DEFAULT_VALIDITY_PERIOD, null, msgType, profileTemplate.getRequiredMemory(), true,
+                                senderRpa);
+                        if (trId == null) status.status = BaseResponseType.ExecutionStatus.Status.Failed;
+                        resp = new CreateISDPResponse(startTime, Calendar.getInstance().getTime(),
+                                DEFAULT_VALIDITY_PERIOD/**/, status, null, null);
                     } else
-                     resp = proxy.createISDP(sender, toAddress, null, msgID, msgType, msgID,
-                            TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), isdp.getIccid(),
-                            mnoOID, profileTemplate.getRequiredMemory(), true, null);
+                        resp = proxy.createISDP(sender, toAddress, null, msgID, msgType, msgID,
+                                TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), isdp.getIccid(),
+                                mnoOID, profileTemplate.getRequiredMemory(), true, null);
                     if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                         throw new Exception("Execution failed: " + resp);
                     return true;
@@ -464,7 +465,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 final SDCommand.APDU store_data_p =
                         ECKeyAgreementEG.isdKeySetEstablishmentSendCert(smdp.secureMessagingCert(),
                                 ECKeyAgreementEG.SM_DP_CERTIFICATE_TYPE, smdp.getAdditionalDiscretionaryData(),
-                                smdp.getSignature());
+                                smdp.getSignature(), platformVersion);
                 // Make data
                 ByteArrayOutputStream os = new ByteArrayOutputStream() {
                     {
@@ -474,7 +475,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 };
                 byte[] data = os.toByteArray();
 
-                return doSendData(em, null, data, trans,true);
+                return doSendData(em, null, data, trans, true);
 
 
             case ESTABLISHKEYSET_SEND_DP_ECKA:
@@ -487,7 +488,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                 final SDCommand apdu = ECKeyAgreementEG.isdKeySetEstablishmentSendKeyParams(randomChallenge, kp, a6,
                         ecasd_pubkey_paramRef);
                 try {
-                    return doSendData(em, null, apdu.toByteArray(), trans,true);
+                    return doSendData(em, null, apdu.toByteArray(), trans, true);
                 } catch (Exception ex) {
                     return false;
                 }
@@ -527,7 +528,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                                 write(c.toByteArray());
                         }
                     }.toByteArray();
-                    boolean res = doSendData(em,trans.getIsdp().getAid(), xdata, trans,false);
+                    boolean res = doSendData(em, trans.getIsdp().getAid(), xdata, trans, false);
                     if (end >= 0 && res) offset = end;
                     return res;
                 } catch (Exception ex) {
@@ -545,30 +546,29 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
 
                     Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
                     final ES3 proxy = es3.l;
-                    final String toAddress  = es3.k;
+                    final String toAddress = es3.k;
                     WsaEndPointReference sender = es3.m;
 
-                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3" +
-                            "-ProfileDownloadCompletedRequest");
+                    final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement/ES3"
+                            + "-ProfileDownloadCompletedRequest");
                     BaseResponseType resp;
                     if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
                         Date startTime = Calendar.getInstance().getTime();
                         BaseResponseType.ExecutionStatus status =
-                                new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess,
-                                        new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "SendData", "", ""));
+                                new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "SendData", "", ""));
 
-                        CommonImpl.profileDownloadComplete(em,status,senderRpa,eid,iccid,profType,address,pol2);
-                        resp = new SendDataResponse(startTime, Calendar.getInstance().getTime(), DEFAULT_VALIDITY_PERIOD, status, null);
+                        CommonImpl.profileDownloadComplete(em, status, senderRpa, eid, iccid, profType, address, pol2);
+                        resp = new SendDataResponse(startTime, Calendar.getInstance().getTime(),
+                                DEFAULT_VALIDITY_PERIOD, status, null);
                     } else
-                        resp = proxy.profileDownloadCompleted(sender, toAddress, null, msgID, msgType,
-                            msgID, TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, profType
-                            , address, pol2);
+                        resp = proxy.profileDownloadCompleted(sender, toAddress, null, msgID, msgType, msgID,
+                                TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, profType,
+                                address, pol2);
                     boolean isSuccess =
                             (resp != null && resp.functionExecutionStatus.status == BaseResponseType.ExecutionStatus.Status.ExecutedSuccess);
 
                     trans.recordResponse(em, "ProfiledownloadComplete", resp.toString(), isSuccess);
-                    if (!isSuccess)
-                        throw new Exception("Execution failed: " + resp);
+                    if (!isSuccess) throw new Exception("Execution failed: " + resp);
                     currentStage = Stage.ENABLEPROFILE; // Skip to next
                     return true;
                 } catch (Exception ex) {
@@ -581,24 +581,24 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
                     try {
                         Utils.Triple<String, ES3, WsaEndPointReference> es3 = getES3Interface(em);
                         final ES3 proxy = es3.l;
-                        final String toAddress  = es3.k;
+                        final String toAddress = es3.k;
                         WsaEndPointReference sender = es3.m;
 
-                        final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement" +
-                                "/ES3-EnableISDP");
+                        final Holder<String> msgType = new Holder<String>("http://gsma" + ".com/ES3/ProfileManagement"
+                                + "/ES3-EnableISDP");
                         String msgID = trans.newRequestMessageID(); // Create new one.
                         String iccid = isdp.getIccid();
                         EnableProfileResponse resp;
                         if (smsrId == RpaEntity.LOCAL_ENTITY_ID) {
                             Date startTime = Calendar.getInstance().getTime();
                             BaseResponseType.ExecutionStatus status =
-                                    new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess,
-                                            new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "SendData", "", ""));
-                            CommonImpl.enableProfile(em,senderRpa,eid,status,iccid,sender,toAddress,msgID,DEFAULT_VALIDITY_PERIOD,null,msgType);
+                                    new BaseResponseType.ExecutionStatus(BaseResponseType.ExecutionStatus.Status.ExecutedSuccess, new BaseResponseType.ExecutionStatus.StatusCode("8" + ".1.1", "SendData", "", ""));
+                            CommonImpl.enableProfile(em, senderRpa, eid, status, iccid, sender, toAddress, msgID,
+                                    DEFAULT_VALIDITY_PERIOD, null, msgType);
                             resp = new EnableProfileResponse(startTime, Calendar.getInstance().getTime(), status, null);
                         } else
-                            resp = proxy.enableProfile(sender, toAddress, null, msgID, msgType,
-                                msgID, TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, null);
+                            resp = proxy.enableProfile(sender, toAddress, null, msgID, msgType, msgID,
+                                    TransactionType.DEFAULT_VALIDITY_PERIOD, isdp.getEuicc().getEid(), iccid, null);
                         if (resp != null && resp.functionExecutionStatus.status != BaseResponseType.ExecutionStatus.Status.ExecutedSuccess)
                             throw new Exception("Execution failed: " + resp);
                         return true;
@@ -625,7 +625,7 @@ public class DownloadProfileTransaction extends SmDpBaseTransactionType implemen
         CREATEISDP, ESTABLISHKEYSET_SEND_CERT_DP_ECDSA, ESTABLISHKEYSET_SEND_DP_ECKA, DOWNLOADPROFILE,
         PROFILEDOWNLOADCOMPLETE, ENABLEPROFILE, COMPLETE, ERROR;
 
-        private static Stage[] vals = values();
+        private static final Stage[] vals = values();
 
         public Stage next() {
             if (this == COMPLETE) return COMPLETE;

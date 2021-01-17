@@ -10,6 +10,35 @@
         <form id="settings-form" class="form-horizontal form-label-left">
             <div class="item form-group">
                 <label class="col-form-label col-md-3 col-sm-3 label-align">
+                    Certificate Issuer OID:
+                </label>
+                <div class="col-md-6 col-sm-6">
+                    <input type="text" placeholder="OID"
+                            name="ci_oid" id="ci_oid"
+                           class="form-control" data-rule-oid="true">
+                    <p class="form-text text-muted">
+                        Certificate Issuer  OID.
+                    </p>
+                </div>
+
+            </div>
+            <div class="item form-group">
+                <label class="col-form-label col-md-3 col-sm-3 label-align">
+                    Certificate Issuer ID (Hex coded):
+                </label>
+                <div class="col-md-6 col-sm-6">
+                    <input type="text" placeholder="CI ID"
+                            name="ca_id" id="ca_id"
+                           class="form-control" data-rule-hex="true">
+                    <p class="form-text text-muted">
+                        Certificate Issuer  ID, hex-coded. Optional. This is used for pre v3.1 eUICCs, which do not use the CI OID.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="item form-group">
+                <label class="col-form-label col-md-3 col-sm-3 label-align">
                     SM-SR OID:
                 </label>
                 <div class="col-md-6 col-sm-6">
@@ -70,6 +99,7 @@
                 </div>
             </div>
 
+
             <div class="item form-group">
                 <label class="col-form-label col-md-3 col-sm-3 label-align">
                     Site ECDSA Certificate:
@@ -126,11 +156,13 @@
                     </div>
                     <p class="form-text text-muted">
                         Hex-coded signed key agreement data (see Table 44 for SGP.02 v4.1, contents of TAG
-                        '5F37'). If Tag '73' contains additional TLVs, please specify the TLV sequence <a href="#tlvs"> above.</a>
+                        '5F37').
+                        This should be provided using the X9.62 format (e.g. output of <em>openssl dgst</em> command).
+                        If Tag '73' contains additional TLVs, please specify the TLV sequence <a href="#tlvs"> above.</a>
 
                     </p>
                     <p class="form-text text-muted">
-                        <a href="rest/settings/getSigningData?type=smsr" target="_blank">Click here to get SM-SR data to be signed</a>
+                       <b> <a href="rest/settings/getSigningData?type=smsr" target="_blank">Click here to get SM-SR data to be signed</a></b>
                     </p>
                     <em id="sm-sr-signed-data-info"></em>
                 </div>
@@ -148,10 +180,13 @@
                     <p class="form-text text-muted">
                         Hex-coded signed key agreement data (see Table 82 for SGP.02 v4.1, contents of TAG
                         '5F37').
+                        This should be provided using the X9.62 format (e.g. output of <em>openssl dgst</em> command).
                         If Tag '73' contains additional TLVs, please specify the TLV sequence <a href="#tlvs"> above.</a>
                     </p>
-                    <p class="form-text text-muted">
-                        <a href="rest/settings/getSigningData?type=smdp" target="_blank">Click here to get SM-DP data to be signed</a>
+                    <p class="form-text text-muted ">
+                        <b>
+                        <a href="rest/settings/getSigningData?type=smdp" target="_blank"> Click here to get SM-DP data to be signed</a>
+                        </b>
                     </p>
                     <em id="sm-dp-signed-data-info"></em>
                 </div>
@@ -191,6 +226,9 @@
  function loadbasicsettings(data) {
    $('#sm_sr_oid').val(data.sm_sr_oid);
    $('#sm_dp_oid').val(data.sm_dp_oid);
+   $('#ci_oid').val(data.ci_oid);
+   $('#ca_id').val(data.ca_id);
+
    var url = data.wsUrlPrefix;
    if (!url || url.indexOf('http') !== 0 ) {
      // Make it:
@@ -235,11 +273,17 @@
        var validator = $(frm).validate({});
        if (!frm.valid())
          return  false;
+       if (!$('#ca_id').val() && !$('#ci-oid').val()) {
+         validator.showErrors({'ca_id': 'Either one of CI OID or the CI ID must be set!'});
+         return false;
+       }
         if (!confirm('Really Update?'))
-          return false;
+            return false;
         var data = {
           sm_sr_oid: $('#sm_sr_oid').val(),
           sm_dp_oid: $('#sm_dp_oid').val(),
+          ci_oid: $('#ci_oid').val(),
+          ca_id: $('#ca_id').val(),
           wsUrlPrefix: $('#wsUrlPrefix').val(),
           crl : getfupload($('#cicrl')),
           ciCertificate: getfupload($('#cicert')),

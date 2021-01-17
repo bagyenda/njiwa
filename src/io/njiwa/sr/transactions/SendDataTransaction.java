@@ -42,14 +42,15 @@ public class SendDataTransaction extends SmSrBaseTransaction {
     public byte[] response = new byte[0];
 
     @Override
-    public Ota.ScriptChaining commandChainingType(Ota.Params params,  Boolean moreToFollow) {
+    public Ota.ScriptChaining commandChainingType(Ota.Params params, Boolean moreToFollow) {
         // Annex K of SGP.02 v4.2
         Eis eis = params.eis;
         boolean active = Utils.toBool(eis.getScriptChainingActive());
         boolean useChaining = false;
         boolean more = Utils.toBool(moreToFollow);
 
-        if (!more)  // As per Annex K, indicate there is no more scripting chaining to be done, and upper layer must mark accordingly.
+        if (!more)  // As per Annex K, indicate there is no more scripting chaining to be done, and upper layer must
+            // mark accordingly.
             return active ? Ota.ScriptChaining.LAST_SCRIPT : Ota.ScriptChaining.NOCHAINING;
 
         try {
@@ -70,21 +71,19 @@ public class SendDataTransaction extends SmSrBaseTransaction {
         }
 
         // Case 2, SCP03t session init, or download template TLVs, as per Sec 4.1.3.2 SGP.02 v4.2
-        if (!useChaining)
-            try {
-                byte[] cmd = cAPDUs.get(0);
-                Utils.Pair<Integer, byte[]> x = Utils.BER.decodeTLV(cmd);
-                int tag = x.k;
-                if (tag == 0x84 || tag == 0x85)
-                    useChaining = true;
-                else if (tag == 0x86)
-                    useChaining = this.index < this.cAPDUs.size() -1; // We are not at last command
-            } catch (Exception ex) {}
+        if (!useChaining) try {
+            byte[] cmd = cAPDUs.get(0);
+            Utils.Pair<Integer, byte[]> x = Utils.BER.decodeTLV(cmd);
+            int tag = x.k;
+            if (tag == 0x84 || tag == 0x85) useChaining = true;
+            else if (tag == 0x86) useChaining = this.index < this.cAPDUs.size() - 1; // We are not at last command
+        } catch (Exception ex) {
+        }
 
         if (useChaining)
-            return active ? Ota.ScriptChaining.SUBSEQUENT_SCRIPT_MORE_TO_FOLLOW : Ota.ScriptChaining.FIRST_SCRIPT_KEEP_ON_RESET;
-        else
-            return active ? Ota.ScriptChaining.LAST_SCRIPT : Ota.ScriptChaining.NOCHAINING;
+            return active ? Ota.ScriptChaining.SUBSEQUENT_SCRIPT_MORE_TO_FOLLOW :
+                    Ota.ScriptChaining.FIRST_SCRIPT_KEEP_ON_RESET;
+        else return active ? Ota.ScriptChaining.LAST_SCRIPT : Ota.ScriptChaining.NOCHAINING;
     }
 
     @Asynchronous // XXX right?
@@ -125,7 +124,7 @@ public class SendDataTransaction extends SmSrBaseTransaction {
     @Override
     public synchronized void processResponse(EntityManager em, long tid, ResponseType rtype, String reqId) {
         Ota.ResponseHandler.ETSI102226APDUResponses r = getResponses();
-        byte[] resp = r.respData; // Get entire built data, return it.
+        byte[] resp = r != null ? r.respData : null; // Get entire built data, return it.
         if (rtype == ResponseType.SUCCESS) {
             // Get stuff
             if (reqId == null) reqId = "";
@@ -142,6 +141,7 @@ public class SendDataTransaction extends SmSrBaseTransaction {
 
             if (hasMore()) return; // Still more data expected
         }
+
         sendResponse(em, rtype == ResponseType.SUCCESS); // Send to caller
     }
 

@@ -13,6 +13,7 @@
 package io.njiwa.common;
 
 import io.njiwa.common.model.KeyComponent;
+import io.njiwa.common.model.RpaEntity;
 import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.x509.AuthorityKeyIdentifier;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -21,7 +22,6 @@ import org.bouncycastle.util.BigIntegers;
 import javax.crypto.KeyAgreement;
 import java.io.ByteArrayOutputStream;
 import java.security.*;
-import java.security.cert.Extension;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
@@ -46,8 +46,7 @@ public class ECKeyAgreementEG {
     public static final int KEY_QUAL_ONE_KEY = 0x5c;
     public static final int KEY_QUAL_THREE_KEYS = 0x10;
 
-    public static  final byte[] DST_VERIFY_KEY_TYPE = new byte[] {(byte)0x82};  // Table 11-17 of GPC
-    public static  final byte[] KEY_AGREEMENT_KEY_TYPE = new byte[] {0, (byte)0x80}; // Table 3-5 of GPC Ammend. E
+    public static  final byte[] KEY_AGREEMENT_USAGE = new byte[] {(byte)0x88}; // Signature verification tag.
     // See https://stackoverflow.com/questions/17877412/how-to-prove-that-one-certificate-is-issuer-of-another-certificates
     private static final String SUBJECT_KEY_IDENTIFIER_OID = "2.5.29.14";
     private static final String AUTHORITY_KEY_IDENTIFIER_OID = "2.5.29.35";
@@ -182,10 +181,11 @@ public class ECKeyAgreementEG {
      * @return
      * @throws Exception
      */
-    public static SDCommand.APDU isdKeySetEstablishmentSendCert(X509Certificate cert, int certificate_type, byte[] discretionaryData, final byte[] sig)
+    public static SDCommand.APDU isdKeySetEstablishmentSendCert(X509Certificate cert, int certificate_type, byte[] discretionaryData,
+                                                                final byte[] sig, long platformVersion)
             throws Exception {
         // Make the data: Table 77 of SGP.02 v4.1
-        final byte[] sigdata = makeCertSigningData(cert, certificate_type, discretionaryData,  KEY_AGREEMENT_KEY_TYPE);
+        final byte[] sigdata = makeCertSigningData(cert, certificate_type, discretionaryData, KEY_AGREEMENT_USAGE);
 
         final byte[] certData = new ByteArrayOutputStream() {
             {
@@ -354,8 +354,9 @@ public class ECKeyAgreementEG {
         };
         // Make signing data and sign it
         Utils.BER.appendTLV(os,  new byte[] { 0x00, (byte)0x85}, randomChallenge);
-        final byte[] sig = Utils.ECC.sign((ECPrivateKey) ephemeralKeys.getPrivate(), os.toByteArray());
-        return isdKeySetEstablishmentSendKeyParams(ePk, a6crt, sig);
+        byte[] sig = Utils.ECC.sign((ECPrivateKey) ephemeralKeys.getPrivate(), os.toByteArray());
+        byte[] plainSig = new Utils.ECC.Signature(sig,true).encodePlain((ECPublicKey)ephemeralKeys.getPublic());
+        return isdKeySetEstablishmentSendKeyParams(ePk, a6crt, plainSig);
     }
 
     public static SDCommand.APDU isdKeySetEstablishmentSendKeyParams(byte[] ePk, byte[]
@@ -376,26 +377,37 @@ public class ECKeyAgreementEG {
                                              byte[] additionaldiscretionaryDataTLVs,
                                              /* byte keyParamRef,  */
                                              byte[] keyUsageQual) throws Exception {
-        ByteArrayOutputStream os = new ByteArrayOutputStream();
+
         // Key paramRef must come from ECpublickey
         byte keyParamRef = (byte)Utils.ECC.getKeyParamRefFromCertificate(cert);
-        // Table 77 of SGP 02 v3.1
-        byte[] cSerial = BigIntegers.asUnsignedByteArray(cert.getSerialNumber());
-        Utils.BER.appendTLV(os, (short) 0x93, cSerial);
-        // Sec 2.3.2.2 of SGP 02 v4.1 says that the following should be the "Authority Key Identifier"
-        byte[] caid =  getCertificateAuthorityKeyIdentifier(cert); // cert.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
-        Utils.BER.appendTLV(os, (short) 0x42, caid);
 
-        byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(cert); // cert.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
-        Utils.BER.appendTLV(os, GPC_A_SUBJECT_IDENTIFIER_TAG, subjectIdentifier);
-        Utils.BER.appendTLV(os, (byte) 0x95, keyUsageQual);
+        byte[] cSerial = BigIntegers.asUnsignedByteArray(cert.getSerialNumber());
+        // Sec 2.3.2.2 of SGP 02 v4.1 says that the following should be the "Authority Key Identifier"
+        byte[] caid =  getCertificateAuthorityKeyIdentifier(cert);
+        String caOID = ServerSettings.getOid(RpaEntity.Type.CI);
+        byte[] caID = ServerSettings.getCAID();
+        byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(cert);
         Date startDate = cert.getNotBefore();
         Date expDate = cert.getNotAfter();
 
-        SimpleDateFormat df = new SimpleDateFormat("yyyMMdd");
+        SimpleDateFormat df = new SimpleDateFormat("yyyyMMdd");
+
+        // Table 78 of SGP 02 v4.2
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+        Utils.BER.appendTLV(os, (short) 0x93, cSerial);
+
+        // We use the encoded CA ID, if given, else we encode the OID as configured...
+        Utils.BER.appendTLV(os, (short) 0x42, caID != null ? caID : Utils.OID.packOID(caOID));
+
+        Utils.BER.appendTLV(os, GPC_A_SUBJECT_IDENTIFIER_TAG, subjectIdentifier);
+        Utils.BER.appendTLV(os, (byte) 0x95, keyUsageQual);
+        ECPublicKey ecPublicKey = (ECPublicKey) cert.getPublicKey();
+        byte[] xpubData = Utils.ECC.encode(ecPublicKey, keyParamRef);
+        /*
         if (startDate != null)
             Utils.BER.appendTLV(os, GPC_A_CERT_EFFECTIVE_DATE_TAG,
                     Utils.HEX.h2b(df.format(startDate)));
+         */
         Utils.BER.appendTLV(os,  GPC_A_CERT_EXPIRY_DATE_TAG,
                 Utils.HEX.h2b(df.format(expDate)));
         // Make the discretionary data:
@@ -407,14 +419,9 @@ public class ECKeyAgreementEG {
            Utils.BER.appendTLV(this,(short)0xC8, new byte[] {(byte)certificateType});
            Utils.BER.appendTLV(this,(short)0xC9, caid);
            if (additionaldiscretionaryDataTLVs != null)
-               this.write(additionaldiscretionaryDataTLVs);
+               write(additionaldiscretionaryDataTLVs);
         }};
         Utils.BER.appendTLV(os, (short) 0x73, dd.toByteArray());
-
-        // Do Public Key
-        ECPublicKey ecPublicKey = (ECPublicKey) cert.getPublicKey();
-        byte[] xpubData = Utils.ECC.encode(ecPublicKey, keyParamRef);
-
         Utils.BER.appendTLV(os, SGP02_PUBLIC_KEY_TAG, xpubData);
         return os.toByteArray();
     }

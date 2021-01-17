@@ -104,6 +104,8 @@ public class ServerSettings {
 
     private static final String SM_SR_OID = "sm-sr-oid";
     private static final String SM_DP_OID = "sm-dp-oid";
+    private static final String CI_OID = "ci-oid";
+    private static final String CI_ID = "ca-id"; // Pre v3.1 CI ID
     private static final String CRL_X509_CONTENT = "ci_crl_content";
     private static final String ADDITIONAL_DISCRETIONARY_DATA_TLVS = "discretionary_data_tlvs";
     private static final String SIGNED_SM_DP_DATA = "signed-sm-dp-data";
@@ -235,6 +237,9 @@ public class ServerSettings {
             put(SERVER_ECDSA_SECRET_KEY_ALIAS, new BaseValidator("server-pkey"));
             put(SM_SR_OID, new BaseValidator("1.2.3.4"));
             put(SM_DP_OID, new BaseValidator("1.2.3.5"));
+            put(CI_OID, new BaseValidator("1.1.1.1"));
+            put(CI_ID, new ByteArrayValidator("", true));
+
             put(ADDITIONAL_DISCRETIONARY_DATA_TLVS, new TLVsValidator(""));
             put(SIGNED_SM_DP_DATA, new ByteArrayValidator("", true));
             put(SIGNED_SM_SR_DATA, new ByteArrayValidator("", true));
@@ -259,8 +264,9 @@ public class ServerSettings {
     }
 
     public static int getRamMinApdus() {
-        return (Integer)propertyValues.get(RAM_MIN_APDUS_CONFIG);
+        return (Integer) propertyValues.get(RAM_MIN_APDUS_CONFIG);
     }
+
     public static boolean getRamUseDefaultConfig() {
         return (Boolean) propertyValues.get(RAM_USE_DEFAULT_CONFIG);
     }
@@ -347,9 +353,8 @@ public class ServerSettings {
         return propertyValues.get(BASEDEPLOYMENTURI) + "/" + Constants.DLR_URI;
     }
 
-    public static String getBasedeploymenturi()
-    {
-        return (String)propertyValues.get(BASEDEPLOYMENTURI);
+    public static String getBasedeploymenturi() {
+        return (String) propertyValues.get(BASEDEPLOYMENTURI);
     }
 
     public static String getSendSmsUrl() {
@@ -458,7 +463,7 @@ public class ServerSettings {
     }
 
     public static void updateCiCert(EntityManager em, X509Certificate certificate) throws Exception {
-        updateCert(em, CI_CERTIFICATE_ALIAS, certificate,true);
+        updateCert(em, CI_CERTIFICATE_ALIAS, certificate, true);
     }
 
     public static Utils.Pair<String, X509Certificate> getServerCertAndAlias() throws Exception {
@@ -470,7 +475,7 @@ public class ServerSettings {
     }
 
     public static void updateServerCert(EntityManager em, X509Certificate certificate) throws Exception {
-        updateCert(em, SERVER_ECDSA_CERTIFICATE_ALIAS, certificate,false);
+        updateCert(em, SERVER_ECDSA_CERTIFICATE_ALIAS, certificate, false);
     }
 
     private static Utils.Pair<String, X509Certificate> getCert(String propertykey) throws Exception {
@@ -478,22 +483,20 @@ public class ServerSettings {
 
         // Try to load it from keystore
 
-            KeyStore ks = Utils.getKeyStore();
-            X509Certificate cert = (X509Certificate) ks.getCertificate(alias);
-            if (cert == null)
-                throw new Utils.KeyStoreEntryNotFound("Certificate not found");
-            return new Utils.Pair<>(alias, cert);
+        KeyStore ks = Utils.getKeyStore();
+        X509Certificate cert = (X509Certificate) ks.getCertificate(alias);
+        if (cert == null) throw new Utils.KeyStoreEntryNotFound("Certificate not found");
+        return new Utils.Pair<>(alias, cert);
     }
 
 
     private static void updateCert(EntityManager em, String propkey, X509Certificate certificate, boolean trusted) throws Exception {
         KeyStore ks = Utils.getKeyStore();
         String alias = (String) propertyValues.get(propkey);
-        if (!trusted)
-            ks.setCertificateEntry(alias, certificate);
+        if (!trusted) ks.setCertificateEntry(alias, certificate);
         else {
             KeyStore.TrustedCertificateEntry c = new KeyStore.TrustedCertificateEntry(certificate);
-            ks.setEntry(alias,c,null);
+            ks.setEntry(alias, c, null);
         }
         updateProp(em, propkey, alias);
     }
@@ -501,6 +504,7 @@ public class ServerSettings {
     public static String getServerEcdsaSecretKeyAlias() {
         return (String) propertyValues.get(SERVER_ECDSA_SECRET_KEY_ALIAS);
     }
+
     public static PrivateKey getServerECDAPrivateKey() {
         String alias = (String) propertyValues.get(SERVER_ECDSA_SECRET_KEY_ALIAS);
         try {
@@ -526,21 +530,34 @@ public class ServerSettings {
 
 
     public static String getOid(RpaEntity.Type type) {
-        return (String) propertyValues.get(
-                type == RpaEntity.Type.SMSR ?
-                SM_SR_OID : type == RpaEntity.Type.SMDP ? SM_DP_OID : null);
+        String key;
+        switch (type) {
+            case SMSR:
+                key = SM_SR_OID;
+                break;
+            case SMDP:
+                key = SM_DP_OID;
+                break;
+            case CI:
+                key = CI_OID;
+                break;
+            default:
+                key = "";
+                break;
+        }
+        return (String) propertyValues.get(key);
     }
 
+    public static byte[] getEncodedOid(RpaEntity.Type type) throws Exception {
+        String oid = getOid(type);
+        return Utils.OID.packOID(oid);
+    }
 
-
-    public static void updateOid(EntityManager em,
-                                 RpaEntity.Type type,
-                                 String oid) throws Exception {
+    public static void updateOid(EntityManager em, RpaEntity.Type type, String oid) throws Exception {
         String xoid = oid.trim();
-        if (!Pattern.matches("^([1-9][0-9]{0,3}|0)([.]([1-9][0-9]{0,6}|0)){5,13}$", xoid))
+        if (!Pattern.matches("^([1-9][0-9]{0,3}|0)([.]([1-9][0-9]{0,6}|0)){5,18}$", xoid))
             throw new Exception("Invalid OID");
-        updateProp(em, type == RpaEntity.Type.SMSR ?
-                SM_SR_OID : SM_DP_OID, xoid);
+        updateProp(em, type == RpaEntity.Type.SMSR ? SM_SR_OID : type == RpaEntity.Type.CI ? CI_OID : SM_DP_OID, xoid);
     }
 
     public static void updateBaseURL(EntityManager em, String baseUrl) throws Exception {
@@ -558,7 +575,7 @@ public class ServerSettings {
 
     public static void updateCRL(EntityManager em, byte[] crldata) throws Exception {
         X509CRL crl = Utils.parseCRL(crldata); // Will throw exception...
-        updateProp(em, CRL_X509_CONTENT,   new String(crldata, StandardCharsets.UTF_8));
+        updateProp(em, CRL_X509_CONTENT, new String(crldata, StandardCharsets.UTF_8));
     }
 
     public static byte[] getAdditionalDiscretionaryDataTlvs() {
@@ -578,6 +595,10 @@ public class ServerSettings {
         return (byte[]) propertyValues.get(SIGNED_SM_SR_DATA);
     }
 
+    public static byte[] getCAID() {return (byte[])propertyValues.get(CI_ID); }
+    public static void updateCAID(EntityManager em, String data) throws Exception {
+        updateProp(em,CI_ID,data);
+    }
     public static void updateSMDPSignedData(EntityManager em, String data) throws Exception {
         updateProp(em, SIGNED_SM_DP_DATA, data);
     }
@@ -595,8 +616,7 @@ public class ServerSettings {
     public static void updateProp(EntityManager em, String key, String value) throws Exception {
 
         Object nvalue = updateProp(key, value);
-        if (nvalue != null)
-            ServerConfigurations.updateSetting(em, key, nvalue.toString());
+        if (nvalue != null) ServerConfigurations.updateSetting(em, key, nvalue.toString());
         else throw new Exception("Invalid format");
 
     }
@@ -885,12 +905,13 @@ public class ServerSettings {
                 release);
 
         public static final int DEFAULT_VALIDITY = 3600 * 24;
-        public static final boolean useIndefiniteCodingInExpandedFormat = false; // SGP.11 v4.1 appendix H spec say no...
+        public static final boolean useIndefiniteCodingInExpandedFormat = false; // SGP.11 v4.1 appendix H spec say
+        // no...
         static final int DEFAULT_WAIT_FOR_PKT_DISPATCH = 300;
 
         public static String jcaProvider = BouncyCastleProvider.PROVIDER_NAME;
 
-        public static long DEFAULT_PERIODIC_STARTUP_DELAY = 30*1000; // Milliseconds
+        public static long DEFAULT_PERIODIC_STARTUP_DELAY = 30 * 1000; // Milliseconds
     }
 }
 /**

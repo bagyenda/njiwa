@@ -16,6 +16,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.njiwa.common.ws.InitialiserServlet;
 import io.njiwa.sr.Session;
+import org.bouncycastle.asn1.*;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
@@ -85,10 +86,9 @@ import java.util.logging.Logger;
  * @brief Utility functions that don't logically fit anywhere else.
  */
 public class Utils {
-
+    public static final long RSP_PLATFORM_VERSION_31 = Utils.platformVersion("3.1");
+    public static final long RSP_PLATFORM_VERSION_LATEST = Utils.platformVersion("4.2");
     public static final Date infiniteDate; //!< General infinite date
-    // public final static org.apache.log4j.Logger lg =
-    //         org.apache.log4j.Logger.getLogger(InitialiserServlet.class.getName()); //!< The
     public final static Logger lg = Logger.getLogger(InitialiserServlet.class.getName());
     private static final boolean[] unreserved_url_chars; //!< This is the list allowed URL characters.
     private static final Object mutex = new Object(); //!< for writing ks file.
@@ -294,6 +294,20 @@ public class Utils {
         return new Pair<>(os.toByteArray(), len);
     }
 
+    public static long platformVersion(String ver) {
+        try {
+            String[] x = ver.split("[.]");
+            int major = Integer.parseInt(x[0]);
+            int minor = x.length > 1 ? Integer.parseInt(x[1]) : 0;
+            int minor2 = x.length > 2 ? Integer.parseInt(x[2]) : 0;
+            // We assume each element can not exceed 999...
+            return (minor2) + (minor * 1000L) + (major * 1000L * 1000);
+        } catch (Exception ex) {
+
+        }
+        return 0;
+    }
+
     /**
      * @param c
      * @return
@@ -416,7 +430,7 @@ public class Utils {
         System.arraycopy(haystack, 0, data, 0, idx); // Copy first part
         System.arraycopy(replacement, 0, data, idx, replacement.length); // Copy the replacement in place...
         System.arraycopy(haystack, idx + needle.length, data, idx + replacement.length,
-                haystack.length - needle.length);
+        haystack.length - needle.length);
 
         return data;
     }
@@ -432,16 +446,14 @@ public class Utils {
      * @brief Get content from URL, return status, reply headers, content
      */
     public static Triple<Integer, Map<String, String>, String> getUrlContent(String url, HttpRequestMethod method,
-                                                                             Map<String, String> req_hdr,
-                                                                             List<Pair<String, String>> cgi_params,
-                                                                             Session context) throws Exception {
+     Map<String, String> req_hdr, List<Pair<String, String>> cgi_params, Session context) throws Exception {
 
         // Deal with params
         String parms = "";
         String sep = "";
         if (cgi_params != null) for (Pair<String, String> p : cgi_params) {
             parms += String.format("%s%s=%s", sep, URLEncoder.encode(p.k, StandardCharsets.UTF_8.toString()),
-                    URLEncoder.encode(p.l, StandardCharsets.UTF_8.toString()));
+             URLEncoder.encode(p.l, StandardCharsets.UTF_8.toString()));
             sep = "&";
         }
 
@@ -456,7 +468,7 @@ public class Utils {
         if (req_hdr.get("User-Agent") == null) {
             String browser_ua = context != null ? context.getBrowserProfileStr() : null;
             String ua = browser_ua != null ? browser_ua : String.format("eUICC Server v%s",
-                    ServerSettings.Constants.version);
+             ServerSettings.Constants.version);
             req_hdr.put("User-Agent", ua);
         }
 
@@ -661,7 +673,7 @@ public class Utils {
 
         if (xnum.length() + 1 != ServerSettings.getNumber_length())
             throw new Exception(String.format("Invalid number: %s, must be %d digits long and of the form 0xxxxxx",
-                    num, ServerSettings.getNumber_length()));
+             num, ServerSettings.getNumber_length()));
 
         return "+" + ServerSettings.getCountry_code() + xnum;
     }
@@ -724,7 +736,6 @@ public class Utils {
         if (o instanceof Integer && 0 == (Integer) o) return true;
         return o instanceof Long && 0L == (Long) o;
     }
-
 
     public static String tarFromAid(String aid) {
         // In accordance with SGP-02-v4.1 Annex H
@@ -1007,6 +1018,129 @@ public class Utils {
         boolean eval(T obj);
     }
 
+    public static class OID {
+        private static void writeField(ByteArrayOutputStream os, long l) {
+            byte[] b = new byte[9];
+            int idx = 8;
+
+            for (b[idx] = (byte) ((int) l & 127); l >= 128L; b[idx] = (byte) ((int) l & 127 | 128)) {
+                l >>= 7;
+                --idx;
+            }
+
+            os.write(b, idx, 9 - idx);
+        }
+
+        private static void writeField(ByteArrayOutputStream os, BigInteger bi) {
+            int n = (bi.bitLength() + 6) / 7;
+            if (n == 0) {
+                os.write(0);
+            } else {
+                BigInteger l = bi;
+                byte[] out = new byte[n];
+
+                for (int i = n - 1; i >= 0; --i) {
+                    out[i] = (byte) (l.intValue() & 127 | 128);
+                    l = l.shiftRight(7);
+                }
+
+                out[n - 1] = (byte) (out[n - 1] & 127);
+                os.write(out, 0, out.length);
+            }
+
+        }
+
+        /**
+         * @param oid
+         * @return
+         * @brief pack OID: Taken from BC ASN1 code
+         */
+        public static byte[] packOID(String oid) {
+            ByteArrayOutputStream os = new ByteArrayOutputStream();
+            OIDTokenizer t = new OIDTokenizer(oid);
+            int l = Integer.parseInt(t.nextToken()) * 40;
+            String s = t.nextToken();
+
+            if (s.length() <= 18) {
+                writeField(os, (long) l + Long.parseLong(s));
+            } else {
+                writeField(os, (new BigInteger(s)).add(BigInteger.valueOf(l)));
+            }
+
+            while (t.hasMoreTokens()) {
+                String x = t.nextToken();
+                if (x.length() <= 18) {
+                    writeField(os, Long.parseLong(x));
+                } else {
+                    writeField(os, new BigInteger(x));
+                }
+            }
+            return os.toByteArray();
+        }
+
+        public static Pair<String, byte[]> parse(byte[] input) {
+
+            StringBuffer buffer = new StringBuffer();
+            long l = 0L;
+            BigInteger integer = null;
+            boolean b = true;
+
+            for (int i = 0; i != input.length; ++i) {
+                int i1 = input[i] & 255;
+                if (l <= 72057594037927808L) {
+                    l += i1 & 127;
+                    if ((i1 & 128) == 0) {
+                        if (b) {
+                            if (l < 40L) {
+                                buffer.append('0');
+                            } else if (l < 80L) {
+                                buffer.append('1');
+                                l -= 40L;
+                            } else {
+                                buffer.append('2');
+                                l -= 80L;
+                            }
+
+                            b = false;
+                        }
+
+                        buffer.append('.');
+                        buffer.append(l);
+                        l = 0L;
+                    } else {
+                        l <<= 7;
+                    }
+                } else {
+                    if (integer == null) {
+                        integer = BigInteger.valueOf(l);
+                    }
+
+                    integer = integer.or(BigInteger.valueOf(i1 & 127));
+                    if ((i1 & 128) == 0) {
+                        if (b) {
+                            buffer.append('2');
+                            integer = integer.subtract(BigInteger.valueOf(80L));
+                            b = false;
+                        }
+
+                        buffer.append('.');
+                        buffer.append(integer);
+                        integer = null;
+                        l = 0L;
+                    } else {
+                        integer = integer.shiftLeft(7);
+                    }
+                }
+            }
+
+            return new Pair<>(buffer.toString(), input);
+            // this.identifier = ;
+            // this.body = org.bouncycastle.util.Arrays.clone(var1);
+
+
+        }
+    }
+
     public static class DGI {
 
         public static void appendLen(OutputStream os, long len) throws Exception {
@@ -1224,7 +1358,7 @@ public class Utils {
 
         public static Node findNode(NodeList nl, String tagname) {
             return findNode(nl,
-                    (Node o) -> (o.getNodeType() == Node.ELEMENT_NODE && o.getNodeName().equalsIgnoreCase(tagname)));
+(Node o) -> (o.getNodeType() == Node.ELEMENT_NODE && o.getNodeName().equalsIgnoreCase(tagname)));
         }
 
         public static Node findNode(Node n, Predicate<Node> pred) {
@@ -1326,7 +1460,7 @@ public class Utils {
         }
 
         private static class XMLReaderWitNamespaceCorrection extends StreamReaderDelegate {
-            private String correctNS;
+            private final String correctNS;
 
             public XMLReaderWitNamespaceCorrection(XMLStreamReader reader, String ns) {
                 super(reader);
@@ -1355,7 +1489,7 @@ public class Utils {
          * @brief known curves according to Table 4-3 of GPC Ammendment E, and Table 24 of SGP.02 v4.1
          */
         private static final Map<Integer, AlgorithmParameterSpec> KNOWN_ECC_CURVES = new ConcurrentHashMap<Integer,
-                AlgorithmParameterSpec>() {{
+                    AlgorithmParameterSpec>() {{
             put(0, new ECGenParameterSpec("P-256"));
             put(1, new ECGenParameterSpec("P-384"));
             put(2, new ECGenParameterSpec("P-512"));
@@ -1375,8 +1509,8 @@ public class Utils {
                     "F1FD178C0B3AD58F10126DE8CE42435B3961ADBCABC8CA6DE8FCF353D86E9C03", 16));
             EllipticCurve curve = new EllipticCurve(p, a, b);
             ECPoint G = ECPointUtil.decodePoint(curve, HEX.h2b("04" +
-                    "B6B3D4C356C139EB31183D4749D423958C27D2DCAF98B70164C97A2DD98F5CFF" +
-                    "6142E0F7C8B204911F9271F0F3ECEF8C2701C307E8E4C9E183115A1554062CFB"));
+            "B6B3D4C356C139EB31183D4749D423958C27D2DCAF98B70164C97A2DD98F5CFF" +
+            "6142E0F7C8B204911F9271F0F3ECEF8C2701C307E8E4C9E183115A1554062CFB"));
             BigInteger n = new BigInteger("F1FD178C0B3AD58F10126DE8CE42435B53DC67E140D2BF941FFDD459C6D655E1", 16);
             put(0x40, new ECParameterSpec(curve, G, n, 1)); // Defined in Table 24 of SGP.02 v4.1 only.
         }};
@@ -1404,7 +1538,7 @@ public class Utils {
             return new ByteArrayOutputStream() {
                 {
                     Utils.BER.appendTLV(this, (short) 0xB0, Q);
-                    write(new byte[]{(byte) 0xF0, (byte) keyParamRef});
+                    write(new byte[]{(byte) 0xF0, 0x01, (byte) keyParamRef});
                 }
             }.toByteArray();
         }
@@ -1520,7 +1654,7 @@ public class Utils {
             CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
             String algo = getHashAlgo((ECPrivateKey) privateKey);
             ContentSigner cs =
-                    new JcaContentSignerBuilder(algo).setProvider(ServerSettings.Constants.jcaProvider).build(privateKey);
+             new JcaContentSignerBuilder(algo).setProvider(ServerSettings.Constants.jcaProvider).build(privateKey);
             gen.addSignerInfoGenerator(new JcaSignerInfoGeneratorBuilder(new JcaDigestCalculatorProviderBuilder().setProvider(ServerSettings.Constants.jcaProvider).build()).build(cs, certificate));
             gen.addCertificates(certs);
             CMSSignedData csd = gen.generate(data, true); // Include data
@@ -1548,19 +1682,34 @@ public class Utils {
 
         public static byte[] sign(ECPrivateKey key, byte[] data) throws Exception {
             String algo = Utils.ECC.getHashAlgo(key);
-            Signature ecdaSign = Signature.getInstance(algo, ServerSettings.Constants.jcaProvider);
+            java.security.Signature ecdaSign = java.security.Signature.getInstance(algo,
+             ServerSettings.Constants.jcaProvider);
             ecdaSign.initSign(key);
 
             ecdaSign.update(data);
             return ecdaSign.sign();
         }
 
+        /**
+         * @param key
+         * @param signature
+         * @param data
+         * @return
+         * @throws Exception
+         * @brief validate X9.62 signature, given public key.
+         */
         public static boolean verifySignature(ECPublicKey key, byte[] signature, byte[] data) throws Exception {
             String algo = ECC.getHashAlgo(key);
-            Signature ecdaSign = Signature.getInstance(algo, ServerSettings.Constants.jcaProvider);
+            java.security.Signature ecdaSign = java.security.Signature.getInstance(algo,
+ ServerSettings.Constants.jcaProvider);
             ecdaSign.initVerify(key);
             ecdaSign.update(data);
             return ecdaSign.verify(signature);
+        }
+
+        public static boolean verifySignature(X509Certificate cert, byte[] signature, byte[] data) throws Exception {
+            ECPublicKey key = (ECPublicKey) cert.getPublicKey();
+            return verifySignature(key, signature, data);
         }
 
         public static KeyPair genKeyPair(AlgorithmParameterSpec parameterSpec) throws Exception {
@@ -1579,6 +1728,77 @@ public class Utils {
          */
         public static KeyPair genKeyPair(int keyParamRef) throws Exception {
             return genKeyPair(getParamSpec(keyParamRef));
+        }
+
+        public static class Signature {
+            public BigInteger r, s; // The parameters as per BSI TR 03111, Sec 5
+
+            public Signature() {}
+            public Signature(BigInteger r, BigInteger s) {
+                this.r = r;
+                this.s = s;
+            }
+
+            /**
+             * @param sig
+             * @return
+             * @throws Exception
+             * @brief decode X9.62  or plain format, as per Sec 5.2.2 of BSI TR03111
+             */
+            public Signature(byte[] sig, boolean x962format) throws Exception {
+                if (x962format) {
+                    ASN1InputStream bIn = new ASN1InputStream(new ByteArrayInputStream(sig));
+                    // Must a sequence. So:
+                    ASN1Sequence seq = (ASN1Sequence) bIn.readObject();
+                    Enumeration e = seq.getObjects();
+                    ASN1Integer r = (ASN1Integer) e.nextElement();
+                    ASN1Integer s = (ASN1Integer) e.nextElement();
+                    this.r = r.getPositiveValue();
+                    this.s = s.getPositiveValue();
+                } else {
+                    int size = sig.length / 2;
+                    byte[] d = new byte[size];
+
+                    System.arraycopy(sig, 0, d, 0, size);
+                    this.r = BigIntegers.fromUnsignedByteArray(d);
+                    System.arraycopy(sig, size, d, 0, size);
+                    this.s = BigIntegers.fromUnsignedByteArray(d);
+                }
+            }
+
+            public byte[] encodeX962() throws Exception {
+                ASN1Integer e1 = new ASN1Integer(r);
+                ASN1Integer e2 = new ASN1Integer(s);
+                ASN1Sequence sequence = new DERSequence(new ASN1Encodable[]{e1, e2});
+                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                sequence.encodeTo(os);
+
+                return os.toByteArray();
+            }
+
+            /**
+             * @param numBits
+             * @return
+             * @brief Encode in plain format a la BSI TR 03111 sec 5.2.1
+             */
+            public byte[] encodePlain(int numBits) throws Exception {
+                int size = (numBits + 7) / 8;
+                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                os.write(BigIntegers.asUnsignedByteArray(size, r));
+                os.write(BigIntegers.asUnsignedByteArray(size, s));
+
+                return os.toByteArray();
+            }
+
+            public byte[] encodePlain(ECPublicKey publicKey) throws Exception {
+                int f = publicKey.getParams().getCurve().getField().getFieldSize();
+                return encodePlain(f);
+            }
+
+            public byte[] encodePlain(X509Certificate certificate) throws Exception {
+                return encodePlain((ECPublicKey) certificate.getPublicKey());
+            }
+
         }
     }
 
@@ -1674,8 +1894,7 @@ public class Utils {
             int len = 0;
             try {
                 len = decodeTLVLen(os);
-                if (len < 0)
-                    tag = -1;
+                if (len < 0) tag = -1;
             } catch (Exception ex) {
                 tag = -1;
             }
@@ -1737,7 +1956,7 @@ public class Utils {
         }
 
         public static byte[] decodeTLV(InputStream in, short expectedTag) throws Exception {
-            return decodeTLV(in, new byte[]{(byte)expectedTag});
+            return decodeTLV(in, new byte[]{(byte) expectedTag});
         }
 
         public static byte[] decodeTLV(InputStream in, byte[] expectedTag) throws Exception {
@@ -1774,6 +1993,9 @@ public class Utils {
             k = xk;
             l = xl;
         }
+
+        public Pair() {
+        }
     }
 
     /**
@@ -1791,6 +2013,9 @@ public class Utils {
             k = xk;
             l = xl;
             m = xm;
+        }
+
+        public Triple() {
         }
     }
 
@@ -1812,6 +2037,9 @@ public class Utils {
             l = xl;
             m = xm;
             o = xo;
+        }
+
+        public Quad() {
         }
     }
 
@@ -1911,7 +2139,7 @@ public class Utils {
                     boolean wildcard_domain = c.domain.charAt(0) == '.' && c.domain.indexOf('.', 1) > 0;
                     boolean domains_match = domain != null && domainMatches(domain, c.domain);
                     boolean suffix_match =
-                            domains_match && ((r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0);
+ domains_match && ((r = domain.indexOf('.')) >= domain.length() - c.domain.length() || r < 0);
 
                     if (path_matches && (explicit_domain == false || wildcard_domain && domains_match && suffix_match))
                         res.add(c); // Add it
@@ -2109,7 +2337,7 @@ public class Utils {
                     }
                     buffer.write(b);
                 }
-                String res = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+                String res = buffer.toString(StandardCharsets.UTF_8.toString());
                 if (res.length() > 0 && res.charAt(res.length() - 1) == '\r')
                     res = res.substring(0, res.length() - 1); // Remove the '\r'
                 return res;
@@ -2334,7 +2562,7 @@ public class Utils {
                 xos.write("\r\n".getBytes(StandardCharsets.UTF_8));
                 if (xhasBody) {
                     byte[] pre = (useChunked) ?
-                            String.format("%X\r\n", body.length).getBytes(StandardCharsets.UTF_8) : new byte[0];
+                     String.format("%X\r\n", body.length).getBytes(StandardCharsets.UTF_8) : new byte[0];
                     byte[] post = (useChunked) ? "\r\n".getBytes(StandardCharsets.UTF_8) : new byte[0];
 
                     xos.write(pre);
@@ -2388,7 +2616,7 @@ public class Utils {
              * @brief Make a HTTP Request directly
              */
             public Request(Method method, String uri, Map<String, String> rHeaders, byte[] body, boolean closeConn,
-                           String ctype) {
+                String ctype) {
                 version = 1.1;
 
                 this.method = method;
@@ -2491,7 +2719,7 @@ public class Utils {
             }
 
             public Response(javax.ws.rs.core.Response.Status rStatus, Map<String, String> rHeaders, String ctype,
-                            byte[] body, boolean closeConn) {
+             byte[] body, boolean closeConn) {
                 headers = new HashMap<>(rHeaders != null ? rHeaders : new HashMap<String, String>());
 
                 headers.put("Date", getServerTime());
@@ -2525,7 +2753,7 @@ public class Utils {
             @Override
             protected void printFirstLine(OutputStream out) throws Exception {
                 String xs = String.format("HTTP/%.1f %s %s", version, status.getStatusCode(), statusMsg != null ?
-                        statusMsg : status.getReasonPhrase());
+                 statusMsg : status.getReasonPhrase());
                 out.write(xs.getBytes(StandardCharsets.UTF_8));
             }
 

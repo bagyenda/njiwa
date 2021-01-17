@@ -35,7 +35,7 @@ public class BasicSettings {
 
     public String ciCertificate; // CI certificate, X509 PEM-encoded for inbound, for outbound see ciCertInfo.
     public String crl; // Certificate revocation list. X509 PEM encoded for inbound, for outbound see crlInfo.
-    public String sm_sr_oid, sm_dp_oid; // SM-SR/SM-DP OID. In/out.
+    public String sm_sr_oid, sm_dp_oid, ci_oid, ca_id; // SM-SR/SM-DP/CI OID In/out.
     public String serverCertificate; // SM-DP/SM-DP Certificate. X509 PEM-encoded for inbound. Must be signed by CI. for outbound, see serverCertInfo;
     public String serverPrivateKey; // ECDSA Private key for the server. Inbound format is hex, for outbound, not set.
     public String smdpSignedData; // Signed SM-DP info for keyagreement (table 77 of SGP 02). Inbound is hex-coded. Outbound will be non-null if set.
@@ -154,6 +154,15 @@ public class BasicSettings {
         } catch (Exception ex) {}
         settings.sm_sr_oid = ServerSettings.getOid(RpaEntity.Type.SMSR);
         settings.sm_dp_oid = ServerSettings.getOid(RpaEntity.Type.SMDP);
+        settings.ci_oid = ServerSettings.getOid(RpaEntity.Type.CI);
+        try {
+            settings.ca_id = Utils.HEX.b2H(ServerSettings.getCAID());
+        } catch (Exception ex) {}
+        if (Utils.isEmpty(settings.ca_id))
+            try {
+                byte[] xid = Utils.OID.packOID(settings.ci_oid);
+                settings.ca_id = Utils.HEX.b2H(xid); // Defaults to...
+            } catch (Exception ex){}
         settings.wsUrlPrefix = ServerSettings.getBasedeploymenturi();
 
         try {

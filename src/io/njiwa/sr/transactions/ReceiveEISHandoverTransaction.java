@@ -250,7 +250,7 @@ public class ReceiveEISHandoverTransaction extends SmSrBaseTransaction {
                     byte[] certSigningData = ECKeyAgreementEG.makeCertSigningData(cert,
                             ECKeyAgreementEG.SM_SR_CERTIFICATE_TYPE,
                             smsr.getAdditionalDiscretionaryData(),
-                             ECKeyAgreementEG.KEY_AGREEMENT_KEY_TYPE);
+                             ECKeyAgreementEG.KEY_AGREEMENT_USAGE);
                     String eid = eis.signedInfo.eid;
                     tr.setMsisdn(eid); // Fake it. For now
                     String msgId = tr.genMessageIDForTrans(em);
@@ -307,7 +307,7 @@ public class ReceiveEISHandoverTransaction extends SmSrBaseTransaction {
                 eSk_sr_ecka = Utils.ECC.encode((ECPrivateKey) pair.getPrivate()); // Store both
                 byte[] cert = ECKeyAgreementEG.makeCertSigningData(smsr.secureMessagingCert(), ECKeyAgreementEG.SM_SR_CERTIFICATE_TYPE,
                         smsr.getAdditionalDiscretionaryData(),
-                        ECKeyAgreementEG.KEY_AGREEMENT_KEY_TYPE);
+                        ECKeyAgreementEG.KEY_AGREEMENT_USAGE);
                 byte[] signature = ECKeyAgreementEG.genCertificateSignature(privateKey, cert);
                 eccLength = Utils.ECC.keyLength((ECPublicKey) pair.getPublic());
                 String eccKeyLength = String.format("ECC-%d", eccLength);

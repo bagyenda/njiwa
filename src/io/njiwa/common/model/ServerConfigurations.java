@@ -66,15 +66,18 @@ public class ServerConfigurations {
     }
 
     public static void updateSetting(EntityManager em, String key, String value) {
+
         try {
             ServerConfigurations v = em.createQuery("from ServerConfigurations WHERE name = :k", ServerConfigurations.class)
                     .setParameter("k", key)
+                    .setLockMode(LockModeType.PESSIMISTIC_WRITE)
                     .getSingleResult();
-            em.remove(v);
-          //  em.flush();
+            v.setValue(value);
+          return; // Found it.
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }
+        // It wasn't there....
         try {
             ServerConfigurations v = new ServerConfigurations();
             v.setName(key);

@@ -762,7 +762,7 @@ public class Ota {
     public enum ScriptChaining {
         NOCHAINING, FIRST_SCRIPT_DELETE_ON_RESET, FIRST_SCRIPT_KEEP_ON_RESET, SUBSEQUENT_SCRIPT_MORE_TO_FOLLOW,
         LAST_SCRIPT;
-        
+
         public static boolean chainEnds(ScriptChaining c)
         {
             return c == null || c == NOCHAINING || c == LAST_SCRIPT;
@@ -1193,8 +1193,7 @@ public class Ota {
                         }
                     }
                     // r = new ETSI102226APDUResponses();
-                    r = ETSI102226APDUResponses.parse(data); // Parse directly.
-                    ((ETSI102226APDUResponses)r).numExecutedApdus = numApdus;
+                    r = ETSI102226APDUResponses.decode(data,numApdus); // Parse directly.
                 } else {
                     r = new GenericEuiccResponse();
                     r.data = data_in;
@@ -1224,8 +1223,8 @@ public class Ota {
 
             public ETSI102226APDUResponses() {}
 
-            public static ETSI102226APDUResponses parse(byte[] in) throws Exception {
-                return parse(new ByteArrayInputStream(in));
+            public static ETSI102226APDUResponses decode(byte[] in, int numExecutedApdus) throws Exception {
+                return decode(new ByteArrayInputStream(in), numExecutedApdus);
             }
 
             public static ETSI102226APDUResponses createGenericErrorResponse(String err)
@@ -1247,12 +1246,13 @@ public class Ota {
              * @throws Exception
              * @brief parse a sequence of RAPDU or SCP03t responses
              */
-            public static ETSI102226APDUResponses parse(InputStream xin) throws Exception {
+            public static ETSI102226APDUResponses decode(InputStream xin, int numExecutedApdus) throws Exception {
                 byte[] data;
                 int tag;
 
                 BufferedInputStream in = new BufferedInputStream(xin);
                 ETSI102226APDUResponses r = new ETSI102226APDUResponses();
+                r.numExecutedApdus = numExecutedApdus;
                 while (in.available() > 0) {
                     in.mark(1);
                     int xtag = in.read() & 0xFF;

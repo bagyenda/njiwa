@@ -386,7 +386,7 @@ $(document).ready(function() {
   $.validator.addMethod('oid', function(v, el) {
     if (!v) return true;
     // See https://www.regextester.com/96618
-    var re = new RegExp('^([1-9][0-9]{0,3}|0)([.]([1-9][0-9]{0,6}|0)){5,13}$');
+    var re = new RegExp('^([1-9][0-9]{0,3}|0)([.]([1-9][0-9]{0,6}|0)){5,18}$');
     if (!re.test(v)) return false; else return true;
   }, 'Please enter a valid OID, e.g. 1.2.3.4....');
 
