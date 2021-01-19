@@ -1,14 +1,14 @@
 /*
  * Njiwa Open Source Embedded M2M UICC Remote Subscription Manager
- * 
- * 
+ *
+ *
  * Copyright (C) 2019 - , Digital Solutions Ltd. - http://www.dsmagic.com
  *
  * Njiwa Dev <dev@njiwa.io>
- * 
+ *
  * This program is free software, distributed under the terms of
  * the GNU General Public License.
- */ 
+ */
 
 package io.njiwa.common;
 
@@ -46,10 +46,7 @@ public class ECKeyAgreementEG {
     public static final int KEY_QUAL_ONE_KEY = 0x5c;
     public static final int KEY_QUAL_THREE_KEYS = 0x10;
 
-    public static  final byte[] KEY_AGREEMENT_USAGE = new byte[] {(byte)0x88}; // Signature verification tag.
-    // See https://stackoverflow.com/questions/17877412/how-to-prove-that-one-certificate-is-issuer-of-another-certificates
-    private static final String SUBJECT_KEY_IDENTIFIER_OID = "2.5.29.14";
-    private static final String AUTHORITY_KEY_IDENTIFIER_OID = "2.5.29.35";
+    public static final byte[] KEY_AGREEMENT_USAGE = new byte[]{(byte) 0x88}; // Signature verification tag.
     public static final int SM_SR_CERTIFICATE_TYPE = 0x02; // Table 39 of SGP.02 v4.1
     public static final int SM_DP_CERTIFICATE_TYPE = 0x01; // Table 77 of SGP.02 v4.1
     public static final byte[] GPC_A_CERTIFICATE_TAG = {(byte) 0x7F, (byte) 0x21};
@@ -60,15 +57,21 @@ public class ECKeyAgreementEG {
     public static final byte[] GPC_A_SUBJECT_IDENTIFIER_TAG = {0x5F, 0x20};
     public static final byte[] GPC_A_CERT_EFFECTIVE_DATE_TAG = {0x5F, 0x25};
     public static final byte[] GPC_A_CERT_EXPIRY_DATE_TAG = {0x5F, 0x24};
+    // See https://stackoverflow.com/questions/17877412/how-to-prove-that-one-certificate-is-issuer-of-another
+    // -certificates
+    private static final String SUBJECT_KEY_IDENTIFIER_OID = "2.5.29.14";
+    private static final String AUTHORITY_KEY_IDENTIFIER_OID = "2.5.29.35";
 
     //1. To generate the ephemeral keys, we We follow this (except for the KDF bit): https://neilmadden.wordpress
     // .com/2016/05/20/ephemeral-elliptic-curve-diffie-hellman-key-agreement-in-java/
     //2. To generate the Shared secret, use http://grepcode.com/file/repo1.maven.org/maven2/org
     // .bouncycastle/bcprov-jdk15/1.45/org/bouncycastle/crypto/agreement/ECDHCBasicAgreement.java?av=f supplying the
     // public and private key
-    //3. Convert the BigInteger to a octetstring using: http://stackoverflow.com/questions/18819095/how-insert-bits-into-block-in-java-cryptography
+    //3. Convert the BigInteger to a octetstring using: http://stackoverflow
+    // .com/questions/18819095/how-insert-bits-into-block-in-java-cryptography
     // Where size = log_base_256 of the number. To get the size (i.e. log) we use: log_256 x = (log_2 x) / (log_2
-    // 256) and: https://www.borelly.net/cb/docs/javaBC-1.4.8/prov/org/bouncycastle/pqc/math/linearalgebra/IntegerFunctions.html
+    // 256) and: https://www.borelly.net/cb/docs/javaBC-1.4
+    // .8/prov/org/bouncycastle/pqc/math/linearalgebra/IntegerFunctions.html
     //4. For the KDF, basically it is enough to do a SHA256(ZAB | counter | [SharedInfo]) because the KDF in TS 03111
     // has a loop that is never entered because ceil(k/l) is always 1. Then take left-most X bytes as required for
     // key len. (Counter is 32bit big-endian value of 1)
@@ -81,21 +84,19 @@ public class ECKeyAgreementEG {
     }
 
 
-    public static byte[] getCertificateSubjectKeyIdentifier(X509Certificate cert)
-    {
+    public static byte[] getCertificateSubjectKeyIdentifier(X509Certificate cert) {
         // According to https://stackoverflow.com/questions/6523081/why-doesnt-my-key-identifier-match#6529052
         // It is always 20 bytes, so we expect 04 LEN 04 LEN2 DATA
         try {
             byte[] o = cert.getExtensionValue(SUBJECT_KEY_IDENTIFIER_OID);
-            return Arrays.copyOfRange(o,4,o.length);
+            return Arrays.copyOfRange(o, 4, o.length);
         } catch (Exception ex) {
             String xs = ex.getMessage();
         }
         return null;
     }
 
-    public static byte[] getCertificateAuthorityKeyIdentifier(X509Certificate cert)
-    {
+    public static byte[] getCertificateAuthorityKeyIdentifier(X509Certificate cert) {
         byte[] o = cert.getExtensionValue(AUTHORITY_KEY_IDENTIFIER_OID);
         ASN1OctetString oc = ASN1OctetString.getInstance(o);
         AuthorityKeyIdentifier aki = AuthorityKeyIdentifier.getInstance(oc.getOctets());
@@ -116,28 +117,25 @@ public class ECKeyAgreementEG {
     }
 
     /**
-     * @brief Generate keyData as per Sec 4.3.3 of BSI TS 03111
      * @param zab
      * @param sharedInfo
      * @param keyDataLengthBits
      * @return
      * @throws Exception
+     * @brief Generate keyData as per Sec 4.3.3 of BSI TS 03111
      */
     public static byte[] x963KDF(byte[] zab, byte[] sharedInfo, int keyDataLengthBits) throws Exception {
         // Big-endian 32-bit integer value "1"
-        byte[] counter = new byte[]{
-                0, 0, 0, 1
-        };
+        byte[] counter = new byte[]{0, 0, 0, 1};
         int ctr = 1;
         final int L = 256; // The hash length;
-        int J = (keyDataLengthBits + L - 1)/L; // The ceil value, see
+        int J = (keyDataLengthBits + L - 1) / L; // The ceil value, see
         MessageDigest hash = MessageDigest.getInstance("SHA-256"); // As per spec
         ByteArrayOutputStream os = new ByteArrayOutputStream();
-        for (int i = 1; i<=J; i++) {
+        for (int i = 1; i <= J; i++) {
             hash.update(zab);
             hash.update(Utils.encodeInteger(ctr, 4));
-            if (sharedInfo != null)
-                hash.update(sharedInfo);
+            if (sharedInfo != null) hash.update(sharedInfo);
             byte[] digest = hash.digest();
             os.write(digest);
             ctr++;
@@ -169,21 +167,21 @@ public class ECKeyAgreementEG {
             {
                 Utils.BER.appendTLV(this, SGP02_CERTIFICATE_OF_OFFCARD_ENTITY_TAG, signedCert);
             }
-        }.toByteArray()); // XXX Might be a long command.
+        }.toByteArray(), (short) 0); // XXX Might be a long command.
     }
 
     /**
-     * @brief: Make the send certificate data. According to GPC Ammendment A Sec 3.3.2, the dat must be TLV encoded.
      * @param cert
      * @param certificate_type
      * @param discretionaryData
      * @param sig
      * @return
      * @throws Exception
+     * @brief: Make the send certificate data. According to GPC Ammendment A Sec 3.3.2, the dat must be TLV encoded.
      */
-    public static SDCommand.APDU isdKeySetEstablishmentSendCert(X509Certificate cert, int certificate_type, byte[] discretionaryData,
-                                                                final byte[] sig, long platformVersion)
-            throws Exception {
+    public static SDCommand.APDU isdKeySetEstablishmentSendCert(X509Certificate cert, int certificate_type,
+                                                                byte[] discretionaryData, final byte[] sig,
+                                                                long platformVersion) throws Exception {
         // Make the data: Table 77 of SGP.02 v4.1
         final byte[] sigdata = makeCertSigningData(cert, certificate_type, discretionaryData, KEY_AGREEMENT_USAGE);
 
@@ -197,66 +195,52 @@ public class ECKeyAgreementEG {
         // Make top-level
         final byte[] xdata = new ByteArrayOutputStream() {
             {
-                Utils.BER.appendTLV(this, GPC_A_CERTIFICATE_TAG,certData);
+                Utils.BER.appendTLV(this, GPC_A_CERTIFICATE_TAG, certData);
             }
         }.toByteArray();
 
         return isdKeySetEstablishmentSendCert(xdata);
     }
 
-    public static byte[] makeA6CRT(final int numkeys,
-                                   final byte[] sdin,
-                                   final byte[] hostID,
-                                   int keyID, int keyVersion, int scenarioParam) throws Exception {
-        return makeA6CRT(numkeys, sdin, hostID, keyID, keyVersion, new byte[0], null,
-                KeyComponent.Type.AES, 16,
+    public static byte[] makeA6CRT(final int numkeys, final byte[] sdin, final byte[] hostID, int keyID,
+                                   int keyVersion, int scenarioParam) throws Exception {
+        return makeA6CRT(numkeys, sdin, hostID, keyID, keyVersion, new byte[0], null, KeyComponent.Type.AES, 16,
                 scenarioParam);
     }
 
-    public static byte[] makeA6CRT(final int numkeys,
-                                   final byte[] sdin,
-                                   final byte[] hostID,
-                                   int keyID, int keyVersion,
-                                   byte[] initialCounter,
-                                   Byte keyAccess,
-                                   KeyComponent.Type keyType,
-                                   int keyLen,
-                                   int scenarioParam) throws Exception {
+    public static byte[] makeA6CRT(final int numkeys, final byte[] sdin, final byte[] hostID, int keyID,
+                                   int keyVersion, byte[] initialCounter, Byte keyAccess, KeyComponent.Type keyType,
+                                   int keyLen, int scenarioParam) throws Exception {
 
         return new ByteArrayOutputStream() {
             {
-                Utils.BER.appendTLV(this, (short) 0xA6,
-                        new ByteArrayOutputStream() {
-                            {
-                                write(new byte[]{
-                                        (byte) 0x90,
-                                        0x02,
-                                        0x03, // Scenario #3
-                                        // Include DR in key derivation, delete existing keys, include sdin/sin if
-                                        // passed
-                                        (byte) (scenarioParam |
-                                                // Whether SDIN and so on is included.
-                                                ((sdin != null && hostID != null) ? 0x4 : 0)),
-                                });
-                                write(new byte[]{(byte) 0x95, 0x01, (byte) (numkeys == 1 ? KEY_QUAL_ONE_KEY : KEY_QUAL_THREE_KEYS)});
-                                // One/three secure
-                                if (keyAccess != null)
-                                    write(new byte[]{(byte) 0x96, 0x01, keyAccess});
-                                // channel key
-                                write(new byte[]{(byte) 0x80, 0x01, (byte) keyType.toInt()}); // AES key
-                                write(new byte[]{(byte) 0x81, 0x01, (byte) keyLen}); // Key length
-                                write(new byte[]{(byte) 0x82, 0x01, (byte) keyID}); // Key Identifier (for first key)
-                                write(new byte[]{(byte) 0x83, 0x01, (byte) keyVersion}); // Key version
-                                if (initialCounter == null)
-                                    write(new byte[]{(byte) 0x91, 0x00,}); // Initial counter = 0
-                                else
-                                    Utils.BER.appendTLV(this, (short) 0x91, initialCounter); // Better beof length 0, 2,03,05 or 08
-                                if (sdin != null && hostID != null) {
-                                    Utils.BER.appendTLV(this, (short) 0x45, sdin);
-                                    Utils.BER.appendTLV(this, (short) 0x84, hostID);
-                                }
-                            }
-                        }.toByteArray());
+                Utils.BER.appendTLV(this, (short) 0xA6, new ByteArrayOutputStream() {
+                    {
+                        write(new byte[]{(byte) 0x90, 0x02, 0x03, // Scenario #3
+                                // Include DR in key derivation, delete existing keys, include sdin/sin if
+                                // passed
+                                (byte) (scenarioParam |
+                                        // Whether SDIN and so on is included.
+                                        ((sdin != null && hostID != null) ? 0x4 : 0)),});
+                        write(new byte[]{(byte) 0x95, 0x01, (byte) (numkeys == 1 ? KEY_QUAL_ONE_KEY :
+                                KEY_QUAL_THREE_KEYS)});
+                        // One/three secure
+                        if (keyAccess != null) write(new byte[]{(byte) 0x96, 0x01, keyAccess});
+                        // channel key
+                        write(new byte[]{(byte) 0x80, 0x01, (byte) keyType.toInt()}); // AES key
+                        write(new byte[]{(byte) 0x81, 0x01, (byte) keyLen}); // Key length
+                        write(new byte[]{(byte) 0x82, 0x01, (byte) keyID}); // Key Identifier (for first key)
+                        write(new byte[]{(byte) 0x83, 0x01, (byte) keyVersion}); // Key version
+                        if (initialCounter == null) write(new byte[]{(byte) 0x91, 0x00,}); // Initial counter = 0
+                        else
+                            Utils.BER.appendTLV(this, (short) 0x91, initialCounter); // Better beof length 0, 2,03,05
+                        // or 08
+                        if (sdin != null && hostID != null) {
+                            Utils.BER.appendTLV(this, (short) 0x45, sdin);
+                            Utils.BER.appendTLV(this, (short) 0x84, hostID);
+                        }
+                    }
+                }.toByteArray());
             }
         }.toByteArray();
     }
@@ -268,14 +252,11 @@ public class ECKeyAgreementEG {
      * @brief Compute the receipt as per Table 4-22 of GPC Ammendment E
      */
     public static byte[] computeReceipt(final byte[] dr, byte[] sdin, byte[] hostID, int keyID, int keyVersion,
-                                        int scenarioParam,
-                                        byte[] receiptKey)
-            throws Exception {
+                                        int scenarioParam, byte[] receiptKey) throws Exception {
         byte[] data = new ByteArrayOutputStream() {
             {
                 write(makeA6CRT(1, sdin, hostID, keyID, keyVersion, scenarioParam));
-                if (dr != null)
-                    Utils.BER.appendTLV(this, (short) 0x85, dr);
+                if (dr != null) Utils.BER.appendTLV(this, (short) 0x85, dr);
             }
         }.toByteArray();
         return Utils.aesMAC(data, receiptKey);
@@ -291,17 +272,14 @@ public class ECKeyAgreementEG {
      * @throws Exception
      * @brief Compute Shared Info according to GPC Ammend. A
      */
-    public static byte[] computeSharedInfo(int keyUsageQual, final byte[] dr, byte[] hostID, byte[] sdin, byte[] sin)
-            throws
-            Exception {
+    public static byte[] computeSharedInfo(int keyUsageQual, final byte[] dr, byte[] hostID, byte[] sdin, byte[] sin) throws Exception {
         // Table 3-28 of GPC Ammendment A
         return new ByteArrayOutputStream() {
             {
                 write(keyUsageQual); // One key
                 write(KeyComponent.Type.AES.toInt()); //  Type = AES
                 write(16); // 16 byte key
-                if (dr != null)
-                    write(dr);
+                if (dr != null) write(dr);
                 if (hostID != null) {
                     Utils.BER.appendTLVlen(this, hostID.length);
                     write(hostID);
@@ -324,8 +302,7 @@ public class ECKeyAgreementEG {
      */
     public static byte[] computeKeyData(int keyQual, byte[] dr, byte[] hostID, byte[] sdin, byte[] sin,
                                         byte[] ecasd_pubkey, int ecasd_pubkey_paramRef, byte[] eSK,
-                                        int keyDataLenBits) throws
-            Exception {
+                                        int keyDataLenBits) throws Exception {
         byte[] sharedInfo = ECKeyAgreementEG.computeSharedInfo(keyQual, dr, hostID, sdin, sin);
         ECPublicKey ecasdPubKey = Utils.ECC.decodePublicKey(ecasd_pubkey, ecasd_pubkey_paramRef);
         ECPrivateKey eSKDPECKA = Utils.ECC.decodePrivateKey(eSK, ecasd_pubkey_paramRef);
@@ -334,35 +311,30 @@ public class ECKeyAgreementEG {
     }
 
     public static byte[] computeKeyData(int keyQual, byte[] dr, byte[] hostID, byte[] sdin, byte[] sin,
-                                        byte[] ecasd_pubkey, int ecasd_pubkey_paramRef, byte[] eSK) throws Exception
-    {
-        return computeKeyData(keyQual,dr,hostID,sdin,sin,ecasd_pubkey,ecasd_pubkey_paramRef,eSK,256);
+                                        byte[] ecasd_pubkey, int ecasd_pubkey_paramRef, byte[] eSK) throws Exception {
+        return computeKeyData(keyQual, dr, hostID, sdin, sin, ecasd_pubkey, ecasd_pubkey_paramRef, eSK, 256);
     }
 
     public static SDCommand.APDU isdKeySetEstablishmentSendKeyParams(byte[] randomChallenge,
-                                                                     final KeyPair
-                                                                             ephemeralKeys,
-                                                                     final byte[] a6crt, int keyRef) throws
-            Exception {
-        ECPrivateKey skey = (ECPrivateKey)ServerSettings.getServerECDAPrivateKey();
+                                                                     final KeyPair ephemeralKeys, final byte[] a6crt,
+                                                                     int keyRef) throws Exception {
+        ECPrivateKey skey = (ECPrivateKey) ServerSettings.getServerECDAPrivateKey();
         byte[] ePk = Utils.ECC.encode((ECPublicKey) ephemeralKeys.getPublic(), keyRef);
         //Make the signable object, Table 81 or SGP v3.1
         ByteArrayOutputStream os = new ByteArrayOutputStream() {
             {
                 Utils.BER.appendTLV(this, SGP02_KEY_ESTABLISHMENT_TAG, a6crt);
                 Utils.BER.appendTLV(this, SGP02_PUBLIC_KEY_TAG, ePk);
-                Utils.BER.appendTLV(this,  new byte[] { 0x00, (byte)0x85}, randomChallenge);
+                Utils.BER.appendTLV(this, new byte[]{0x00, (byte) 0x85}, randomChallenge);
             }
         };
 
         byte[] sig = Utils.ECC.Signature.sign(skey, os.toByteArray()); // Signed with our key, as per spec...
-        byte[] plainSig = new Utils.ECC.Signature(sig,true).encodePlain((ECPublicKey)ephemeralKeys.getPublic());
+        byte[] plainSig = new Utils.ECC.Signature(sig, true).encodePlain((ECPublicKey) ephemeralKeys.getPublic());
         return isdKeySetEstablishmentSendKeyParams(ePk, a6crt, plainSig);
     }
 
-    public static SDCommand.APDU isdKeySetEstablishmentSendKeyParams(byte[] ePk, byte[]
-            a6crt, byte[] sig)
-            throws Exception {
+    public static SDCommand.APDU isdKeySetEstablishmentSendKeyParams(byte[] ePk, byte[] a6crt, byte[] sig) throws Exception {
         byte[] tdata = new ByteArrayOutputStream() {
             {
                 Utils.BER.appendTLV(this, SGP02_KEY_ESTABLISHMENT_TAG, a6crt);
@@ -373,18 +345,17 @@ public class ECKeyAgreementEG {
         return new SDCommand.APDU(0x80, 0xE2, 0x89, 0x01, tdata);
     }
 
-    public static byte[] makeCertSigningData(final X509Certificate cert,
-                                             int certificateType,
+    public static byte[] makeCertSigningData(final X509Certificate cert, int certificateType,
                                              byte[] additionaldiscretionaryDataTLVs,
-                                             /* byte keyParamRef,  */
+            /* byte keyParamRef,  */
                                              byte[] keyUsageQual) throws Exception {
 
         // Key paramRef must come from ECpublickey
-        byte keyParamRef = (byte)Utils.ECC.getKeyParamRefFromCertificate(cert);
+        byte keyParamRef = (byte) Utils.ECC.getKeyParamRefFromCertificate(cert);
 
         byte[] cSerial = BigIntegers.asUnsignedByteArray(cert.getSerialNumber());
         // Sec 2.3.2.2 of SGP 02 v4.1 says that the following should be the "Authority Key Identifier"
-        byte[] caid =  getCertificateAuthorityKeyIdentifier(cert);
+        byte[] caid = getCertificateAuthorityKeyIdentifier(cert);
         String caOID = ServerSettings.getOid(RpaEntity.Type.CI);
         byte[] caID = ServerSettings.getCAID();
         byte[] subjectIdentifier = getCertificateSubjectKeyIdentifier(cert);
@@ -404,31 +375,28 @@ public class ECKeyAgreementEG {
         Utils.BER.appendTLV(os, (byte) 0x95, keyUsageQual);
         ECPublicKey ecPublicKey = (ECPublicKey) cert.getPublicKey();
         byte[] xpubData = Utils.ECC.encode(ecPublicKey, keyParamRef);
-        /*
+
         if (startDate != null)
-            Utils.BER.appendTLV(os, GPC_A_CERT_EFFECTIVE_DATE_TAG,
-                    Utils.HEX.h2b(df.format(startDate)));
-         */
-        Utils.BER.appendTLV(os,  GPC_A_CERT_EXPIRY_DATE_TAG,
-                Utils.HEX.h2b(df.format(expDate)));
+            Utils.BER.appendTLV(os, GPC_A_CERT_EFFECTIVE_DATE_TAG, Utils.HEX.h2b(df.format(startDate)));
+
+        Utils.BER.appendTLV(os, GPC_A_CERT_EXPIRY_DATE_TAG, Utils.HEX.h2b(df.format(expDate)));
         // Make the discretionary data:
         // Table 77 of SGP 02 v4.1 & XX shows it should have:
         // C8 01 cert_type (01 = SM-DP, 02 = SM-SR
         // C9 {L} authority_key_identifier
         // Other TLVs
         ByteArrayOutputStream dd = new ByteArrayOutputStream() {{
-           Utils.BER.appendTLV(this,(short)0xC8, new byte[] {(byte)certificateType});
-           Utils.BER.appendTLV(this,(short)0xC9, caid);
-           if (additionaldiscretionaryDataTLVs != null)
-               write(additionaldiscretionaryDataTLVs);
+            Utils.BER.appendTLV(this, (short) 0xC8, new byte[]{(byte) certificateType});
+            Utils.BER.appendTLV(this, (short) 0xC9, caid);
+            if (additionaldiscretionaryDataTLVs != null) write(additionaldiscretionaryDataTLVs);
         }};
         Utils.BER.appendTLV(os, (short) 0x73, dd.toByteArray());
         Utils.BER.appendTLV(os, SGP02_PUBLIC_KEY_TAG, xpubData);
         return os.toByteArray();
     }
 
-    public static byte[] genCertificateSignature(PrivateKey key, final X509Certificate cert, int certificate_type, byte[] discretionaryData, byte[] keyUsageQual)
-            throws Exception {
+    public static byte[] genCertificateSignature(PrivateKey key, final X509Certificate cert, int certificate_type,
+                                                 byte[] discretionaryData, byte[] keyUsageQual) throws Exception {
         // Generate a certificate signature
         byte[] os = makeCertSigningData(cert, certificate_type, discretionaryData, keyUsageQual);
         return genCertificateSignature(key, os);
