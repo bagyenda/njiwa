@@ -119,7 +119,7 @@ public class RpaEntity {
     private byte[] additionalDiscretionaryData; //!< Discretionary data as per GPC Ammendment E. This is extracted from the
     // certificate
     // data
-    @Column(columnDefinition = "Additional discretionary data TLVs")
+    @Column
     private byte[] signature; //!< Public key signature according to GPC Ammendment E and SGP v3.1. This is extract
     // from the
     // certificate date
