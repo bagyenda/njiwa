@@ -1,10 +1,12 @@
 version: '3.3'
 
+secrets:
+  postgres-passwd:
+    file: ./secrets/postgres-passwd.txt
 
 services:
   njiwa:
-    build:
-      context: .
+    image: 'njiwa:latest'
     container_name: njiwa
     ports:
       - 9990:9990
@@ -20,9 +22,11 @@ services:
     container_name: db
     ports:
       - 5432:5432
+    secrets:
+      - source: postgres-passwd
     environment:
       - POSTGRES_USER=njiwa
-      - POSTGRES_PASSWORD=Ughuh8oh
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres-passwd
 
   redis:
     image: 'redis:latest'
