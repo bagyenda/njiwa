@@ -60,11 +60,52 @@ certain resources needed to run Njiwa. Take note of the Wildfly/JBOSS home direc
  You may deploy the WAR file in the usual JBOSS/Wildfly manner (usually a matter of copying it to
  *${WILDFLYHOME}/standalone/deployments*. 
 
+### Using Docker
+
+This repo has support for docker using the ```com.palantir.docker``` gradle plugin.
+
+First change to the folder `build`
+
+````
+cd build
+````
+
+Build the njiwa docker image. Note that the creation of the image executes the
+steps mentioned above in *deploying the war file to wildfly*
+
+````
+gradle docker
+````
+
+Create the file `build/secrets/postgres-password.txt` and ensure that it contains the
+password for the database user `njiwa`. This secret is used by the database
+docker image during the creation of the database
+
+```
+echo my-awesome-password > /secrets/postgres-password.txt
+```
+
+Create the `docker-compose.yml` file that specifies the services by running
+
+```
+gradle generateDockerCompose
+```
+
+Finally to start everything up run
+
+```
+gradle dockerComposeUp
+```
+
+You can do all the docker steps above in one go like so:
+
+```
+gradle docker generateDockerCompose dockerComposeUp
+```
+
 ## Getting Help, Helping Out, etc.
 
  We welcome feedback, assistance, etc. Please use the issues tab on github to send any of these, 
  or ping us directly at dev@njiwa.io - we'd love to hear from you.
 
  Thank you!
-
- 
