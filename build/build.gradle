@@ -51,6 +51,8 @@ dependencies {
     compile "redis.clients:jedis:2.6.1"
     compile "org.picketlink:picketlink-deltaspike:2.7.0.Final"
     compile "org.picketlink:picketlink-idm-simple-schema:2.7.0.Final"
+
+    // implementation 'org.postgresql:postgresql:42.2.21.jre7'
 }
 
 war {
