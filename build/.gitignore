@@ -2,3 +2,5 @@ gradlew
 gradlew.bat
 build/*
 .gradle/*
+secrets/postgres-passwd.txt
+docker-compose.yml

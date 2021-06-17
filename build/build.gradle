@@ -1,6 +1,11 @@
+plugins {
+    id 'war'
+    id 'com.palantir.docker' version '0.26.0'
+    id "com.palantir.docker-compose" version "0.26.0"
+    id "com.palantir.docker-run" version "0.26.0"
+}
 version '0.8'
 
-apply plugin: 'war'
 sourceCompatibility = 1.8
 project.webAppDirName = '../web'
 repositories {
@@ -46,6 +51,8 @@ dependencies {
     compile "redis.clients:jedis:2.6.1"
     compile "org.picketlink:picketlink-deltaspike:2.7.0.Final"
     compile "org.picketlink:picketlink-idm-simple-schema:2.7.0.Final"
+
+    // implementation 'org.postgresql:postgresql:42.2.21.jre7'
 }
 
 war {
@@ -56,4 +63,14 @@ war {
         }
     }
 
+}
+
+docker {
+    name 'njiwa'
+    dockerfile file('files/Dockerfile')
+    files "files/module.xml","files/njiwa.settings","files/postgresql-42.2.21.jar","files/standalone.xml", tasks.war.outputs
+}
+
+dockerCompose {
+    template 'files/docker-compose.yml.template'
 }
